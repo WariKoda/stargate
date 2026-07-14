@@ -47,6 +47,18 @@ Use a different config file:
 gate --config /path/to/ssh_config
 ```
 
+Print the exact, shell-safe OpenSSH command without starting the TUI:
+
+```sh
+gate --print production
+```
+
+Start asynchronous direct TCP checks for the displayed host endpoints:
+
+```sh
+gate --check
+```
+
 The config path is selected in this order:
 
 1. `--config PATH`
@@ -62,6 +74,9 @@ The config path is selected in this order:
 | Apply filter | `Enter` | — |
 | Clear/cancel filter | `Esc` | — |
 | Connect | `Enter` | Left-click a host |
+| Preview SSH command | `Ctrl+P` | — |
+| Copy SSH command | `Ctrl+Y` | — |
+| Check selected host | `Ctrl+R` | — |
 | Toggle extended help | `?` | — |
 | Quit | `Ctrl+C`, or `Esc` when no filter is active | — |
 
@@ -70,6 +85,15 @@ typing unambiguous; navigation uses the arrow keys.
 
 When an SSH session ends, Stargate restores the full, unfiltered host list,
 keeps the connected host selected, and remains available for the next connection.
+Command copying uses the operating system clipboard and reports an error when no
+supported clipboard utility is available.
+
+Press `Ctrl+R` to check the selected host, or start `gate --check` to check all
+hosts automatically. Connectivity checks run concurrently with a two-second
+timeout and a bounded number of connections. They only test direct TCP access to the
+effective `HostName` and `Port`; they do not authenticate and do not traverse
+`ProxyJump` or `ProxyCommand` routes. A failed direct check therefore does not
+necessarily mean that a host configured through a jump host is unreachable.
 
 ## SSH config behavior
 

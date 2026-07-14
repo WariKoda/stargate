@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/charmbracelet/x/term"
 
 	appconfig "github.com/nibra180/stargate-tui/internal/config"
+	"github.com/nibra180/stargate-tui/internal/connectivity"
 	sshexecutor "github.com/nibra180/stargate-tui/internal/ssh"
 	"github.com/nibra180/stargate-tui/internal/tui"
 )
@@ -28,6 +30,8 @@ func main() {
 func run(args []string) error {
 	flags := flag.NewFlagSet("gate", flag.ContinueOnError)
 	configPath := flags.String("config", "", "path to SSH config (overrides STARGATE_CONFIG)")
+	printAlias := flags.String("print", "", "print the SSH command for an alias and exit")
+	checkConnectivity := flags.Bool("check", false, "check direct TCP connectivity in the host list")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -44,19 +48,40 @@ func run(args []string) error {
 	if err != nil {
 		return err
 	}
+	if *printAlias != "" {
+		return printCommand(os.Stdout, executor, *printAlias)
+	}
 	if err := requireInteractiveTerminal(term.IsTerminal); err != nil {
 		return err
 	}
 
-	return runSessionLoop(loaded.Hosts, executor)
+	checker := connectivity.New(connectivity.DefaultTimeout, connectivity.DefaultConcurrency)
+	return runSessionLoop(loaded.Hosts, executor, checker, *checkConnectivity)
 }
 
-func runSessionLoop(hosts []appconfig.Host, executor sshexecutor.Executor) error {
+func printCommand(output io.Writer, executor sshexecutor.Executor, alias string) error {
+	preview, err := executor.Preview(alias)
+	if err != nil {
+		return fmt.Errorf("preview SSH command: %w", err)
+	}
+	_, err = fmt.Fprintln(output, preview)
+	return err
+}
+
+func runSessionLoop(
+	hosts []appconfig.Host,
+	executor sshexecutor.Executor,
+	checker tui.ConnectivityChecker,
+	checkOnStart bool,
+) error {
 	var resume *tui.SessionResume
 
 	for {
 		program := tea.NewProgram(
-			tui.New(hosts, executor, resume),
+			tui.New(hosts, executor, resume, tui.ConnectivityOptions{
+				Checker:      checker,
+				CheckOnStart: checkOnStart,
+			}),
 			tea.WithAltScreen(),
 			tea.WithMouseCellMotion(),
 		)

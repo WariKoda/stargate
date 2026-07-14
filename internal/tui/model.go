@@ -33,6 +33,8 @@ type Model struct {
 	keys           keyMap
 	styles         styles
 	connector      Connector
+	checker        ConnectivityChecker
+	checkOnStart   bool
 	requestedHost  *appconfig.Host
 	pendingConnect *appconfig.Host
 	resumeMessage  string
@@ -41,10 +43,32 @@ type Model struct {
 // Connector builds the native SSH command for a selected host alias.
 type Connector interface {
 	Command(alias string) (*exec.Cmd, error)
+	Preview(alias string) (string, error)
 }
 
+// ConnectivityChecker tests a host endpoint without opening an SSH session.
+type ConnectivityChecker interface {
+	Check(host appconfig.Host) error
+}
+
+// ConnectivityOptions configures manual and automatic TCP checks.
+type ConnectivityOptions struct {
+	Checker      ConnectivityChecker
+	CheckOnStart bool
+}
+
+type connectivityState uint8
+
+const (
+	connectivityUnchecked connectivityState = iota
+	connectivityChecking
+	connectivityReachable
+	connectivityUnavailable
+)
+
 type hostItem struct {
-	host appconfig.Host
+	host         appconfig.Host
+	connectivity connectivityState
 }
 
 func (i hostItem) Title() string {
@@ -64,6 +88,14 @@ func (i hostItem) Description() string {
 	}
 	if i.host.ViaJump {
 		address += "  • via Jump-Host"
+	}
+	switch i.connectivity {
+	case connectivityChecking:
+		address += "  • checking TCP…"
+	case connectivityReachable:
+		address += "  • TCP reachable"
+	case connectivityUnavailable:
+		address += "  • TCP unavailable"
 	}
 	return address
 }
@@ -85,14 +117,33 @@ type showResumeStatusMsg struct {
 	message string
 }
 
+type connectivityCheckedMsg struct {
+	alias string
+	err   error
+}
+
+type commandCopiedMsg struct {
+	preview string
+	err     error
+}
+
 // New creates a Stargate TUI model for the given SSH hosts and connector.
-func New(hosts []appconfig.Host, connector Connector, resume *SessionResume) Model {
+func New(hosts []appconfig.Host, connector Connector, resume *SessionResume, connectivityOptions ...ConnectivityOptions) Model {
 	appStyles := newStyles()
 	keys := newKeyMap()
 	delegate := newHostDelegate(appStyles)
+	var connectivity ConnectivityOptions
+	if len(connectivityOptions) > 0 {
+		connectivity = connectivityOptions[0]
+	}
+
 	items := make([]list.Item, 0, len(hosts))
 	for _, host := range hosts {
-		items = append(items, hostItem{host: host})
+		state := connectivityUnchecked
+		if connectivity.Checker != nil && connectivity.CheckOnStart {
+			state = connectivityChecking
+		}
+		items = append(items, hostItem{host: host, connectivity: state})
 	}
 
 	hostList := list.New(items, delegate, defaultWidth, defaultHeight)
@@ -101,18 +152,20 @@ func New(hosts []appconfig.Host, connector Connector, resume *SessionResume) Mod
 	hostList.StatusMessageLifetime = 5 * time.Second
 	hostList.SetStatusBarItemName("Host", "connectable hosts")
 	hostList.AdditionalShortHelpKeys = func() []key.Binding {
-		return []key.Binding{keys.connect}
+		return []key.Binding{keys.connect, keys.preview}
 	}
 	hostList.AdditionalFullHelpKeys = func() []key.Binding {
-		return []key.Binding{keys.connect}
+		return []key.Binding{keys.connect, keys.preview, keys.copy, keys.check}
 	}
 	applyListStyles(&hostList, appStyles)
 
 	model := Model{
-		list:      hostList,
-		keys:      keys,
-		styles:    appStyles,
-		connector: connector,
+		list:         hostList,
+		keys:         keys,
+		styles:       appStyles,
+		connector:    connector,
+		checker:      connectivity.Checker,
+		checkOnStart: connectivity.CheckOnStart,
 	}
 	if resume != nil {
 		host := resume.Host
@@ -128,13 +181,22 @@ func New(hosts []appconfig.Host, connector Connector, resume *SessionResume) Mod
 
 // Init satisfies tea.Model.
 func (m Model) Init() tea.Cmd {
-	if m.resumeMessage == "" {
-		return nil
+	commands := make([]tea.Cmd, 0, len(m.list.Items())+1)
+	if m.resumeMessage != "" {
+		message := m.resumeMessage
+		commands = append(commands, func() tea.Msg {
+			return showResumeStatusMsg{message: message}
+		})
 	}
-	message := m.resumeMessage
-	return func() tea.Msg {
-		return showResumeStatusMsg{message: message}
+	if m.checker != nil && m.checkOnStart {
+		for _, item := range m.list.Items() {
+			host, ok := item.(hostItem)
+			if ok {
+				commands = append(commands, checkConnectivity(m.checker, host.host))
+			}
+		}
 	}
+	return tea.Batch(commands...)
 }
 
 // SelectedHost returns the currently highlighted SSH host.
@@ -170,6 +232,12 @@ func (m *Model) selectHostByAlias(alias string) {
 		}
 		m.list.Select(index)
 		return
+	}
+}
+
+func checkConnectivity(checker ConnectivityChecker, host appconfig.Host) tea.Cmd {
+	return func() tea.Msg {
+		return connectivityCheckedMsg{alias: host.Alias, err: checker.Check(host)}
 	}
 }
 

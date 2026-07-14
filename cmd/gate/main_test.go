@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"flag"
 	"os"
@@ -8,6 +9,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	sshexecutor "github.com/nibra180/stargate-tui/internal/ssh"
 )
 
 func TestRunHandlesHelpBeforeLoadingConfig(t *testing.T) {
@@ -24,6 +27,27 @@ func TestRunRejectsPositionalArguments(t *testing.T) {
 	err := run([]string{"unexpected"})
 	if err == nil || !strings.Contains(err.Error(), "unexpected arguments") {
 		t.Fatalf("run(unexpected) error = %v", err)
+	}
+}
+
+func TestPrintCommandWritesPreview(t *testing.T) {
+	binDir := t.TempDir()
+	binaryPath := filepath.Join(binDir, "ssh")
+	if err := os.WriteFile(binaryPath, []byte("#!/bin/sh\n"), 0o700); err != nil {
+		t.Fatalf("write fake ssh: %v", err)
+	}
+	t.Setenv("PATH", binDir)
+
+	executor, err := sshexecutor.New("/tmp/ssh config")
+	if err != nil {
+		t.Fatalf("New executor: %v", err)
+	}
+	var output bytes.Buffer
+	if err := printCommand(&output, executor, "production"); err != nil {
+		t.Fatalf("printCommand: %v", err)
+	}
+	if got, want := output.String(), binaryPath+" -F '/tmp/ssh config' -- production\n"; got != want {
+		t.Errorf("printCommand output = %q, want %q", got, want)
 	}
 }
 

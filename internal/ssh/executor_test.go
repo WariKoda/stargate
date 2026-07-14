@@ -31,6 +31,21 @@ func TestNewFindsSSHAndBuildsSafeCommand(t *testing.T) {
 	}
 }
 
+func TestPreviewQuotesTheExactCommand(t *testing.T) {
+	t.Parallel()
+
+	executor := Executor{binaryPath: "/opt/OpenSSH Client/ssh", configPath: "/home/user/.ssh/work config"}
+	preview, err := executor.Preview("customer's-host")
+	if err != nil {
+		t.Fatalf("Preview: %v", err)
+	}
+
+	want := `'/opt/OpenSSH Client/ssh' -F '/home/user/.ssh/work config' -- 'customer'"'"'s-host'`
+	if preview != want {
+		t.Errorf("Preview() = %q, want %q", preview, want)
+	}
+}
+
 func TestNewRejectsMissingBinaryAndConfig(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 

@@ -147,6 +147,91 @@ func TestModelHelpShortcutDoesNotStartFilter(t *testing.T) {
 	}
 }
 
+func TestModelPreviewsAndCopiesSelectedCommand(t *testing.T) {
+	t.Parallel()
+
+	model := New([]appconfig.Host{{Alias: "production", HostName: "prod.example.com", Port: "22"}}, &stubConnector{}, nil)
+	model = updateModel(t, model, tea.KeyMsg{Type: tea.KeyCtrlP})
+	if !strings.Contains(model.View(), "ssh -- production") {
+		t.Error("command preview is not shown")
+	}
+
+	var copied string
+	message, ok := copyCommand("ssh -- production", func(value string) error {
+		copied = value
+		return nil
+	})().(commandCopiedMsg)
+	if !ok || message.err != nil || copied != "ssh -- production" {
+		t.Fatalf("copyCommand() = %#v, copied %q", message, copied)
+	}
+	model = updateModel(t, model, message)
+	if !strings.Contains(model.View(), "Copied: ssh -- production") {
+		t.Error("successful copy status is not shown")
+	}
+}
+
+func TestModelRunsOptInConnectivityChecks(t *testing.T) {
+	t.Parallel()
+
+	checker := &stubConnectivityChecker{}
+	model := New(
+		[]appconfig.Host{{Alias: "production", HostName: "prod.example.com", Port: "22"}},
+		&stubConnector{},
+		nil,
+		ConnectivityOptions{Checker: checker, CheckOnStart: true},
+	)
+	if !strings.Contains(model.View(), "checking TCP") {
+		t.Error("pending TCP check is not shown")
+	}
+
+	command := model.Init()
+	if command == nil {
+		t.Fatal("Init() did not start the connectivity check")
+	}
+	message, ok := command().(connectivityCheckedMsg)
+	if !ok {
+		t.Fatalf("connectivity command returned %T", command())
+	}
+	model = updateModel(t, model, message)
+	if checker.alias != "production" || !strings.Contains(model.View(), "TCP reachable") {
+		t.Errorf("connectivity result missing; checked %q, view %q", checker.alias, model.View())
+	}
+
+	model = updateModel(t, model, connectivityCheckedMsg{alias: "production", err: errors.New("refused")})
+	if !strings.Contains(model.View(), "TCP unavailable") {
+		t.Error("failed TCP check is not shown")
+	}
+}
+
+func TestModelStartsSelectedConnectivityCheckFromTUI(t *testing.T) {
+	t.Parallel()
+
+	checker := &stubConnectivityChecker{}
+	model := New(
+		[]appconfig.Host{{Alias: "production", HostName: "prod.example.com", Port: "22"}},
+		&stubConnector{},
+		nil,
+		ConnectivityOptions{Checker: checker},
+	)
+	if strings.Contains(model.View(), "checking TCP") {
+		t.Error("manual connectivity check started before the shortcut")
+	}
+
+	updated, command := model.Update(tea.KeyMsg{Type: tea.KeyCtrlR})
+	model = modelFromTea(t, updated)
+	if command == nil || !strings.Contains(model.View(), "checking TCP") {
+		t.Fatal("Ctrl+R did not start the selected host check")
+	}
+	message, ok := command().(connectivityCheckedMsg)
+	if !ok || message.alias != "production" || checker.alias != "production" {
+		t.Fatalf("Ctrl+R check = %#v, checked %q", message, checker.alias)
+	}
+	model = updateModel(t, model, message)
+	if !strings.Contains(model.View(), "TCP reachable") {
+		t.Error("manual connectivity result is not shown")
+	}
+}
+
 func TestModelQuitsToConnect(t *testing.T) {
 	t.Parallel()
 
@@ -320,11 +405,28 @@ type stubConnector struct {
 	err error
 }
 
+type stubConnectivityChecker struct {
+	alias string
+	err   error
+}
+
+func (s *stubConnectivityChecker) Check(host appconfig.Host) error {
+	s.alias = host.Alias
+	return s.err
+}
+
 func (s *stubConnector) Command(alias string) (*exec.Cmd, error) {
 	if s.err != nil {
 		return nil, s.err
 	}
 	return exec.Command("ssh", "--", alias), nil
+}
+
+func (s *stubConnector) Preview(alias string) (string, error) {
+	if s.err != nil {
+		return "", s.err
+	}
+	return "ssh -- " + alias, nil
 }
 
 func updateModel(t *testing.T, model Model, msg tea.Msg) Model {

@@ -48,6 +48,29 @@ func (e Executor) Command(alias string) (*exec.Cmd, error) {
 	return exec.Command(e.binaryPath, "-F", e.configPath, "--", alias), nil
 }
 
+// Preview returns the exact OpenSSH invocation as a shell-safe command line.
+func (e Executor) Preview(alias string) (string, error) {
+	command, err := e.Command(alias)
+	if err != nil {
+		return "", err
+	}
+
+	arguments := make([]string, len(command.Args))
+	for index, argument := range command.Args {
+		arguments[index] = quoteShellArgument(argument)
+	}
+	return strings.Join(arguments, " "), nil
+}
+
+func quoteShellArgument(argument string) string {
+	if argument != "" && strings.IndexFunc(argument, func(character rune) bool {
+		return !unicode.IsLetter(character) && !unicode.IsDigit(character) && !strings.ContainsRune("@%_+=:,./-", character)
+	}) == -1 {
+		return argument
+	}
+	return "'" + strings.ReplaceAll(argument, "'", `'"'"'`) + "'"
+}
+
 func validateAlias(alias string) error {
 	if alias == "" {
 		return errors.New("SSH alias must not be empty")

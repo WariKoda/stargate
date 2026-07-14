@@ -7,6 +7,9 @@ import (
 
 type keyMap struct {
 	connect key.Binding
+	preview key.Binding
+	copy    key.Binding
+	check   key.Binding
 }
 
 func newKeyMap() keyMap {
@@ -14,6 +17,18 @@ func newKeyMap() keyMap {
 		connect: key.NewBinding(
 			key.WithKeys("enter"),
 			key.WithHelp("enter/click", "connect"),
+		),
+		preview: key.NewBinding(
+			key.WithKeys("ctrl+p"),
+			key.WithHelp("ctrl+p", "preview command"),
+		),
+		copy: key.NewBinding(
+			key.WithKeys("ctrl+y"),
+			key.WithHelp("ctrl+y", "copy command"),
+		),
+		check: key.NewBinding(
+			key.WithKeys("ctrl+r"),
+			key.WithHelp("ctrl+r", "check TCP"),
 		),
 	}
 }
