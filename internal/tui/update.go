@@ -13,6 +13,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.resize(msg.Width, msg.Height)
 
 	case tea.KeyMsg:
+		if m.shouldStartDirectFilter(msg) {
+			return m.startDirectFilter(msg)
+		}
 		if m.list.FilterState() != list.Filtering && key.Matches(msg, m.keys.connect) {
 			host, ok := m.SelectedHost()
 			if !ok {
@@ -45,6 +48,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case connectionFinishedMsg:
 		m.connecting = false
+		selectedIndex := m.list.GlobalIndex()
+		m.list.ResetFilter()
+		if selectedIndex >= 0 && selectedIndex < len(m.list.Items()) {
+			m.list.Select(selectedIndex)
+		}
 		return m, m.list.NewStatusMessage(connectionFinishedStatus(msg.host, msg.err))
 	}
 

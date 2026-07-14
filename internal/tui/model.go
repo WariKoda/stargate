@@ -93,6 +93,7 @@ func New(hosts []appconfig.Host, connector Connector) Model {
 	}
 
 	hostList := list.New(items, delegate, defaultWidth, defaultHeight)
+	configureListKeyMap(&hostList)
 	hostList.Title = "Stargate"
 	hostList.StatusMessageLifetime = 5 * time.Second
 	hostList.SetStatusBarItemName("Host", "connectable hosts")

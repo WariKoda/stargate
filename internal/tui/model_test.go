@@ -99,13 +99,51 @@ func TestModelNavigationAndFuzzyFilter(t *testing.T) {
 	}
 }
 
-func TestModelSlashStartsFiltering(t *testing.T) {
+func TestModelDirectTypingStartsAndExtendsFilter(t *testing.T) {
+	t.Parallel()
+
+	for _, firstRune := range []rune{'p', 'j', 'k', 'q'} {
+		model := New([]appconfig.Host{{Alias: "project", HostName: "example.com", Port: "22"}}, nil)
+		model = updateModel(t, model, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{firstRune}})
+		if model.list.FilterState() != list.Filtering {
+			t.Errorf("typing %q left filter state at %s", firstRune, model.list.FilterState())
+		}
+		if got := model.list.FilterValue(); got != string(firstRune) {
+			t.Errorf("typing %q set filter to %q", firstRune, got)
+		}
+	}
+
+	model := New([]appconfig.Host{{Alias: "project", HostName: "example.com", Port: "22"}}, nil)
+	model.list.SetFilterText("pro")
+	model = updateModel(t, model, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	if model.list.FilterState() != list.Filtering || model.list.FilterValue() != "prod" {
+		t.Errorf("typing after applied filter produced state=%s value=%q", model.list.FilterState(), model.list.FilterValue())
+	}
+}
+
+func TestModelSlashStillStartsFiltering(t *testing.T) {
 	t.Parallel()
 
 	model := New([]appconfig.Host{{Alias: "server", HostName: "example.com", Port: "22"}}, nil)
 	model = updateModel(t, model, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
 	if model.list.FilterState() != list.Filtering {
 		t.Fatalf("FilterState() = %s, want filtering", model.list.FilterState())
+	}
+	if model.list.FilterValue() != "" {
+		t.Errorf("slash shortcut set filter value to %q, want empty", model.list.FilterValue())
+	}
+}
+
+func TestModelHelpShortcutDoesNotStartFilter(t *testing.T) {
+	t.Parallel()
+
+	model := New([]appconfig.Host{{Alias: "server", HostName: "example.com", Port: "22"}}, nil)
+	model = updateModel(t, model, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	if !model.list.Help.ShowAll {
+		t.Error("? did not open extended help")
+	}
+	if model.list.FilterState() != list.Unfiltered {
+		t.Errorf("? changed filter state to %s", model.list.FilterState())
 	}
 }
 
@@ -156,6 +194,35 @@ func TestModelRunsAndReturnsFromSSHProcess(t *testing.T) {
 	}
 	if !strings.Contains(model.View(), "SSH-Sitzung beendet: production") {
 		t.Error("View() does not show completed SSH session status")
+	}
+}
+
+func TestModelClearsFilterAfterSSHSession(t *testing.T) {
+	t.Parallel()
+
+	hosts := []appconfig.Host{
+		{Alias: "development", HostName: "dev.example.com", Port: "22"},
+		{Alias: "production", HostName: "prod.example.com", Port: "22"},
+	}
+	model := New(hosts, &stubConnector{})
+	model.list.SetFilterText("prod")
+	if len(model.list.VisibleItems()) != 1 {
+		t.Fatal("test setup did not filter the host list")
+	}
+
+	model = updateModel(t, model, connectionFinishedMsg{host: hosts[1]})
+	if model.list.FilterState() != list.Unfiltered {
+		t.Errorf("FilterState() = %s, want unfiltered", model.list.FilterState())
+	}
+	if model.list.FilterValue() != "" {
+		t.Errorf("FilterValue() = %q, want empty", model.list.FilterValue())
+	}
+	if len(model.list.VisibleItems()) != len(hosts) {
+		t.Errorf("len(VisibleItems()) = %d, want %d", len(model.list.VisibleItems()), len(hosts))
+	}
+	selected, ok := model.SelectedHost()
+	if !ok || selected.Alias != "production" {
+		t.Errorf("SelectedHost() = %#v, %t; want production", selected, ok)
 	}
 }
 

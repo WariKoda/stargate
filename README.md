@@ -19,7 +19,7 @@ forwarding therefore continue to work as configured.
 Install the latest published version after the first release has been pushed:
 
 ```sh
-go install github.com/nibra180/stargate-tui/cmd/stargate@latest
+go install github.com/nibra180/stargate-tui/cmd/gate@latest
 ```
 
 For a private repository, configure Git authentication and `GOPRIVATE` first.
@@ -38,13 +38,13 @@ make install
 Use the default SSH config:
 
 ```sh
-stargate
+gate
 ```
 
 Use a different config file:
 
 ```sh
-stargate --config /path/to/ssh_config
+gate --config /path/to/ssh_config
 ```
 
 The config path is selected in this order:
@@ -57,16 +57,19 @@ The config path is selected in this order:
 
 | Action | Keyboard | Mouse |
 |---|---|---|
-| Navigate | `↑`/`↓` or `j`/`k` | Scroll wheel |
-| Filter | `/`, then type | — |
+| Navigate | `↑`/`↓` | Scroll wheel |
+| Filter | Start typing (`/` remains optional) | — |
 | Apply filter | `Enter` | — |
 | Clear/cancel filter | `Esc` | — |
 | Connect | `Enter` | Left-click a host |
 | Toggle extended help | `?` | — |
-| Quit | `q` or `Ctrl+C` | — |
+| Quit | `Ctrl+C`, or `Esc` when no filter is active | — |
 
-When an SSH session ends, Stargate restores the TUI and remains available for
-the next connection.
+Printable keys, including `j`, `k`, and `q`, are filter input. This keeps direct
+typing unambiguous; navigation uses the arrow keys.
+
+When an SSH session ends, Stargate restores the full, unfiltered host list,
+keeps the connected host selected, and remains available for the next connection.
 
 ## SSH config behavior
 
@@ -93,7 +96,7 @@ Stargate does not read passwords, private key contents, or SSH agent data.
 ## Development
 
 ```sh
-make build      # build bin/stargate
+make build      # build bin/gate
 make test       # run tests with the race detector
 make vet        # run go vet
 make check      # test + vet
@@ -106,7 +109,7 @@ A local installation smoke test can be run without changing the normal Go bin
 directory:
 
 ```sh
-GOBIN="$(mktemp -d)" go install ./cmd/stargate
+GOBIN="$(mktemp -d)" go install ./cmd/gate
 ```
 
 ## Release checklist
@@ -119,7 +122,7 @@ GOBIN="$(mktemp -d)" go install ./cmd/stargate
 5. Verify:
 
    ```sh
-   go install github.com/nibra180/stargate-tui/cmd/stargate@v0.1.0
+   go install github.com/nibra180/stargate-tui/cmd/gate@v0.1.0
    ```
 
 No release tag is created automatically by the build.

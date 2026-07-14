@@ -22,6 +22,8 @@
 | 6 | Windows | **Nein** — nur Unix (vereinfacht TTY-Handling) |
 | 7 | Verteilung | **`go install`** (braucht öffentlichen Module-Pfad + VCS-Tag) |
 | 8 | Plan persistieren | **Ja** — diese Datei |
+| 9 | Startbefehl | **`gate`** (Binary/Command-Paket) |
+| 10 | Filterstart | **Direktes Tippen**; druckbare Zeichen sind Filtereingabe |
 
 ---
 
@@ -54,7 +56,7 @@ kein SSH-Reimplementierung.
 
 ```
 stargate/
-├── cmd/stargate/
+├── cmd/gate/
 │   ├── main.go                     # Entry: Flags/Env → Config laden → TUI → Auswahl → ssh exec
 │   └── main_test.go
 ├── internal/
@@ -66,6 +68,7 @@ stargate/
 │   ├── tui/
 │   │   ├── model.go                # Zustand: Hosts, Filter, Cursor, Phase
 │   │   ├── model_test.go
+│   │   ├── filter.go               # Direkter Type-to-filter-Einstieg
 │   │   ├── mouse.go                # Klick-Hit-Testing + Mausrad-Navigation
 │   │   ├── update.go               # Messages: Key/Mouse/Window-Resize
 │   │   ├── view.go                 # Rendering: Liste + Filterzeile + Help/Footer
@@ -137,11 +140,15 @@ Aufbauend auf `kevinburke/ssh_config` (keine Eigenimplementierung):
 
 | Aktion | Tastatur | Maus |
 |---|---|---|
-| Navigieren | `↑`/`↓`, `j`/`k` | Scrollrad / Klick = auswählen |
-| Filtern | `/` aktiviert den Filter, dann tippen (Fuzzy über Alias+HostName+User@Host:Port) | — |
+| Navigieren | `↑`/`↓` | Scrollrad / Klick = auswählen |
+| Filtern | Direkt tippen; `/` bleibt optional (Fuzzy über Alias+HostName+User@Host:Port) | — |
 | Filter zurücksetzen | `Esc` | — |
 | Verbinden | `Enter` | **Klick** auf Eintrag |
-| Beenden | `q` / `Ctrl+C` | — |
+| Beenden | `Ctrl+C` oder `Esc` ohne aktiven Filter | — |
+
+Druckbare Zeichen — einschließlich `j`, `k` und `q` — sind Filtereingabe.
+Dadurch gibt es keine datenabhängigen Konflikte; Navigation erfolgt eindeutig
+über Pfeiltasten.
 
 Maus via `tea.WithMouseCellMotion`. Filter über Bubbles `list`-Filter
 (Fuzzy-Matcher). Bei 10 Hosts kaum nötig, aber skalierbar.
@@ -159,8 +166,9 @@ Ablauf:
    verbindet stdin/stdout/stderr direkt mit dem Terminal; ein eigener PTY- oder
    `Setctty`-Layer ist nicht nötig.
 3. Auf Beendigung von ssh warten; Exit-Status im Callback erfassen.
-4. Bubble Tea stellt Terminal und TUI automatisch wieder her; zurück zu
-   `Browsing`, mit Statusmeldung bei Erfolg bzw. Exit-Code/Fehler.
+4. Bubble Tea stellt Terminal und TUI automatisch wieder her; der Filter wird
+   geleert, die vollständige Liste mit dem verbundenen Host als Auswahl gezeigt
+   und eine Statusmeldung bei Erfolg bzw. Exit-Code/Fehler ausgegeben.
 
 **Warum nicht prozessersetzt (`syscall.Exec`)?** Dann ist keine Rückkehr zur
 TUI möglich — Entscheidung 1 verlangt aber die Rückkehr. Warum **nicht**
@@ -172,7 +180,7 @@ ssh-Escape-Sequenzen funktionieren nur zuverlässig mit dem nativen Client.
 ## 7. CLI-Oberfläche
 
 ```
-stargate [--config PATH]
+gate [--config PATH]
 ```
 
 - `--config PATH`: alternative Config-Datei (Präzedenz über Env).
@@ -198,12 +206,12 @@ stargate [--config PATH]
 
 ## 9. Verteilung
 
-- **`go install github.com/nibra180/stargate-tui/cmd/stargate@latest`** nach
+- **`go install github.com/nibra180/stargate-tui/cmd/gate@latest`** nach
   Push des ersten Releases. Private Repositories benötigen passende Git-/`GOPRIVATE`-Konfiguration.
 - Kanonischer Module-Pfad stimmt mit dem Git-Remote überein.
 - `Makefile`-Targets für Build, Test, Vet, Check, Coverage, Install und Clean.
 - README mit Installation, Bedienung, Config-Semantik und Release-Checkliste.
-- Lokaler `go install ./cmd/stargate`-Smoke-Test ist erfolgreich; Remote-`@latest`
+- Lokaler `go install ./cmd/gate`-Smoke-Test ist erfolgreich; Remote-`@latest`
   folgt nach Commit, Push und Versionstag.
 
 ---
@@ -218,8 +226,8 @@ stargate [--config PATH]
    geladene Config via `-F`, sichere Alias-Trennung via `--`, Rückkehr zur TUI und
    Exit-Status-Handling.
 4. **Polish — abgeschlossen:** Mouse-Cell-Motion, Mausrad-Navigation,
-   Direktverbindung per Klick, präziser Empty-State, längere Statusmeldungen und
-   TTY-Validierung.
+   Direktverbindung per Klick, direkter Type-to-filter-Einstieg, präziser
+   Empty-State, längere Statusmeldungen und TTY-Validierung.
 5. **Release-Readiness — technisch abgeschlossen:** README, Makefile,
    `.gitignore`, kanonischer Module-Pfad und lokaler `go install`-Smoke-Test.
    Ausstehend sind nur Release-Commit, öffentliche/private Go-Modul-Konfiguration

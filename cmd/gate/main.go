@@ -19,13 +19,13 @@ func main() {
 		if errors.Is(err, flag.ErrHelp) {
 			return
 		}
-		fmt.Fprintf(os.Stderr, "stargate: %v\n", err)
+		fmt.Fprintf(os.Stderr, "gate: %v\n", err)
 		os.Exit(1)
 	}
 }
 
 func run(args []string) error {
-	flags := flag.NewFlagSet("stargate", flag.ContinueOnError)
+	flags := flag.NewFlagSet("gate", flag.ContinueOnError)
 	configPath := flags.String("config", "", "path to SSH config (overrides STARGATE_CONFIG)")
 	if err := flags.Parse(args); err != nil {
 		return err

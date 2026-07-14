@@ -1,7 +1,7 @@
 GO ?= go
-BINARY ?= stargate
+BINARY ?= gate
 BUILD_DIR ?= bin
-PACKAGE := ./cmd/stargate
+PACKAGE := ./cmd/gate
 
 .PHONY: build test vet check coverage install clean
 
