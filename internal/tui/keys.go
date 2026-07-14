@@ -10,7 +10,7 @@ func newKeyMap() keyMap {
 	return keyMap{
 		connect: key.NewBinding(
 			key.WithKeys("enter"),
-			key.WithHelp("enter", "connect"),
+			key.WithHelp("enter/click", "connect"),
 		),
 	}
 }

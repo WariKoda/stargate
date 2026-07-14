@@ -7,9 +7,11 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/term"
 
-	appconfig "github.com/nibra/stargate/internal/config"
-	"github.com/nibra/stargate/internal/tui"
+	appconfig "github.com/nibra180/stargate-tui/internal/config"
+	sshexecutor "github.com/nibra180/stargate-tui/internal/ssh"
+	"github.com/nibra180/stargate-tui/internal/tui"
 )
 
 func main() {
@@ -37,9 +39,28 @@ func run(args []string) error {
 		return err
 	}
 
-	program := tea.NewProgram(tui.New(loaded.Hosts), tea.WithAltScreen())
+	executor, err := sshexecutor.New(loaded.Path)
+	if err != nil {
+		return err
+	}
+	if err := requireInteractiveTerminal(term.IsTerminal); err != nil {
+		return err
+	}
+
+	program := tea.NewProgram(
+		tui.New(loaded.Hosts, executor),
+		tea.WithAltScreen(),
+		tea.WithMouseCellMotion(),
+	)
 	if _, err := program.Run(); err != nil {
 		return fmt.Errorf("run TUI: %w", err)
+	}
+	return nil
+}
+
+func requireInteractiveTerminal(isTerminal func(uintptr) bool) error {
+	if !isTerminal(os.Stdin.Fd()) || !isTerminal(os.Stdout.Fd()) {
+		return errors.New("interactive terminal required on stdin and stdout")
 	}
 	return nil
 }

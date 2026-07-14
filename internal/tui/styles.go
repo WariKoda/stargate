@@ -19,7 +19,8 @@ func newStyles() styles {
 
 func newHostDelegate(appStyles styles) list.DefaultDelegate {
 	delegate := list.NewDefaultDelegate()
-	delegate.SetSpacing(1)
+	delegate.SetHeight(hostItemHeight)
+	delegate.SetSpacing(hostItemSpacing)
 	delegate.Styles.SelectedTitle = delegate.Styles.SelectedTitle.
 		BorderForeground(appStyles.accent).
 		Foreground(appStyles.accent)

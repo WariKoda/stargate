@@ -4,7 +4,7 @@
 > Auswahl stellt (Tastatur + Maus, mit Filter) und per echtem `ssh`-Client
 > verbindet. Nach Beenden der SSH-Session kehrt die TUI zurück.
 
-**Status:** Meilensteine 1–2 abgeschlossen; Meilenstein 3 bereit zur Umsetzung.
+**Status:** Meilensteine 1–5 technisch abgeschlossen; Release-Commit und Versionstag ausstehend.
 **Phase:** Umsetzung.
 
 ---
@@ -45,8 +45,8 @@ exponiert, ergänzt Stargate sie um einen kleinen AST-Walker für die Alias-Ermi
 erzwingt die Delegation an den nativen `ssh`-Client — die TUI ist ein Launcher,
 kein SSH-Reimplementierung.
 
-**Module-Pfad ( Platzhalter, für `go install` zu bestätigen ):**
-`github.com/nibra/stargate` — durch tatsächlichen VCS-Pfad ersetzen.
+**Kanonischer Module-Pfad:** `github.com/nibra180/stargate-tui`
+(abgeleitet aus dem konfigurierten Git-Remote).
 
 ---
 
@@ -66,16 +66,18 @@ stargate/
 │   ├── tui/
 │   │   ├── model.go                # Zustand: Hosts, Filter, Cursor, Phase
 │   │   ├── model_test.go
+│   │   ├── mouse.go                # Klick-Hit-Testing + Mausrad-Navigation
 │   │   ├── update.go               # Messages: Key/Mouse/Window-Resize
 │   │   ├── view.go                 # Rendering: Liste + Filterzeile + Help/Footer
 │   │   ├── keys.go                 # Keymap + Help-Bindings
 │   │   └── styles.go               # lipgloss-Stile
 │   └── ssh/
-│       ├── executor.go             # ssh als Kindprozess mit TTY-Vererbung; danach Rückkehr
-│       └── exec_unix.go            # SysProcAttr (Setctty/Setsid/Foreground), reines Unix
+│       ├── executor.go             # Native ssh-Command-Erzeugung mit geladener Config
+│       └── executor_test.go
+├── .gitignore                      # Build-/Coverage-Artefakte
 ├── go.mod / go.sum
-├── README.md                       # Build/Install/Usage
-└── Makefile                        # build / test / install / vet
+├── README.md                       # Installation, Bedienung, Entwicklung, Release
+└── Makefile                        # build / test / vet / check / coverage / install / clean
 ```
 
 **Trennung** (`config` / `tui` / `ssh`) hält Parsing-Logik aus der UI und CLI
@@ -151,15 +153,14 @@ Maus via `tea.WithMouseCellMotion`. Filter über Bubbles `list`-Filter
 **Strategie: Kindprozess mit TTY-Vererbung + Rückkehr zur TUI.**
 
 Ablauf:
-1. Auswahl trifft ein → bubbletea verlässt Raw-Modus/Alternate-Screen
-   (passiert automatisch, wenn die UI den Fokus abgibt / wir das Programm in den
-   Hintergrund treten lassen).
-2. `ssh` als **Kindprozess**: `Stdin/Stdout/Stderr = os.Stdin/…`,
-   `SysProcAttr{Setctty: true, Setsid: true, Foreground: true}` (Unix) → ssh
-   erhält das steuernde Terminal.
-3. Auf Beendigung von ssh warten; Exit-Status erfassen.
-4. **TUI wiederherstellen** (Raw-Modus/Alternate-Screen erneut aktivieren) und
-   zurück zu `Browsing` — ggf. kurzer Hinweis bei Exit-Code ≠ 0.
+1. Auswahl trifft ein → `tea.ExecProcess` lässt Bubble Tea Raw-Modus und
+   Alternate-Screen kontrolliert freigeben.
+2. Native Ausführung als `ssh -F <geladene-config> -- <alias>`. Bubble Tea
+   verbindet stdin/stdout/stderr direkt mit dem Terminal; ein eigener PTY- oder
+   `Setctty`-Layer ist nicht nötig.
+3. Auf Beendigung von ssh warten; Exit-Status im Callback erfassen.
+4. Bubble Tea stellt Terminal und TUI automatisch wieder her; zurück zu
+   `Browsing`, mit Statusmeldung bei Erfolg bzw. Exit-Code/Fehler.
 
 **Warum nicht prozessersetzt (`syscall.Exec`)?** Dann ist keine Rückkehr zur
 TUI möglich — Entscheidung 1 verlangt aber die Rückkehr. Warum **nicht**
@@ -176,7 +177,7 @@ stargate [--config PATH]
 
 - `--config PATH`: alternative Config-Datei (Präzedenz über Env).
 - `STARGATE_CONFIG`: Env-Override (unterhalb von `--config`).
-- Ohne TTY an stdout → Abbruch mit klarem Hinweis (TUI braucht Terminal).
+- Ohne TTY an stdin oder stdout → Abbruch mit klarem Hinweis.
 - `ssh` wird in `$PATH` erwartet (Start-Check, sonst klare Fehlermeldung).
 
 ---
@@ -197,12 +198,13 @@ stargate [--config PATH]
 
 ## 9. Verteilung
 
-- **`go install github.com/nibra/stargate/cmd/stargate@latest`**
-  (Module-Pfad Platzhalter → durch echten VCS-Pfad ersetzen).
-- Voraussetzungen: öffentliches Repo + Git-Tag für stabile Version.
-- Zusätzlich: `Makefile`-Targets `build`/`test`/`install` (lokal, auf
-  `$GOBIN`).
-- README mit Install/Usage.
+- **`go install github.com/nibra180/stargate-tui/cmd/stargate@latest`** nach
+  Push des ersten Releases. Private Repositories benötigen passende Git-/`GOPRIVATE`-Konfiguration.
+- Kanonischer Module-Pfad stimmt mit dem Git-Remote überein.
+- `Makefile`-Targets für Build, Test, Vet, Check, Coverage, Install und Clean.
+- README mit Installation, Bedienung, Config-Semantik und Release-Checkliste.
+- Lokaler `go install ./cmd/stargate`-Smoke-Test ist erfolgreich; Remote-`@latest`
+  folgt nach Commit, Push und Versionstag.
 
 ---
 
@@ -212,11 +214,16 @@ stargate [--config PATH]
    Host-Modell + Wildcard-Filter + ViaJump) inkl. Unit-Tests. Override via Flag/Env.
 2. **TUI-Shell — abgeschlossen:** bubbletea `model/update/view`, Liste,
    Navigation, Fuzzy-Filter, Help/Footer, „via Jump-Host"-Anzeige und CLI-Entry.
-3. **SSH-Executor — als Nächstes:** Kindprozess mit TTY-Vererbung, Rückkehr zur
-   TUI, Exit-Status-Handling.
-4. **Polish:** Maus-Support sowie Feinschliff für Empty-States und Fehlermeldungen.
-5. **Release-Readiness:** README, Makefile, Module-Pfad klären, Git-Tag,
-   `go install`-Smoke-Test.
+3. **SSH-Executor — abgeschlossen:** nativer Kindprozess über `tea.ExecProcess`,
+   geladene Config via `-F`, sichere Alias-Trennung via `--`, Rückkehr zur TUI und
+   Exit-Status-Handling.
+4. **Polish — abgeschlossen:** Mouse-Cell-Motion, Mausrad-Navigation,
+   Direktverbindung per Klick, präziser Empty-State, längere Statusmeldungen und
+   TTY-Validierung.
+5. **Release-Readiness — technisch abgeschlossen:** README, Makefile,
+   `.gitignore`, kanonischer Module-Pfad und lokaler `go install`-Smoke-Test.
+   Ausstehend sind nur Release-Commit, öffentliche/private Go-Modul-Konfiguration
+   und ein explizit gewählter SemVer-Tag.
 
 ---
 
