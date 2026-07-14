@@ -1,0 +1,224 @@
+# Stargate — Architektur- und Umsetzungsplan
+
+> TUI, die SSH-Verbindungen aus `~/.ssh/config` (inkl. `Include`) ausliest, zur
+> Auswahl stellt (Tastatur + Maus, mit Filter) und per echtem `ssh`-Client
+> verbindet. Nach Beenden der SSH-Session kehrt die TUI zurück.
+
+**Status:** Plan finalisiert, bereit zur Umsetzung.
+**Phase:** Planung (noch kein Implementierungscode erzeugt).
+
+---
+
+## 0. Entscheidungs-Log (aufgelöste Rückfragen)
+
+| # | Frage | Entscheidung |
+|---|---|---|
+| Stack | Technologie | **Go + bubbletea** (Charm) |
+| 1 | Nach SSH-Ende | **Zurück zur TUI** → Kindprozess-Variante (nicht `syscall.Exec`) |
+| 2 | ProxyJump-Anzeige | **Ja** — pro Host „via Jump-Host" anzeigen |
+| 3 | Gruppierung/Tags | **Nein** — bewusst out of scope |
+| 4 | `Match exec …` parsen | **Nein** — out of scope |
+| 5 | Config-Pfad-Override | **Ja** — `--config`-Flag + `STARGATE_CONFIG`-Env |
+| 6 | Windows | **Nein** — nur Unix (vereinfacht TTY-Handling) |
+| 7 | Verteilung | **`go install`** (braucht öffentlichen Module-Pfad + VCS-Tag) |
+| 8 | Plan persistieren | **Ja** — diese Datei |
+
+---
+
+## 1. Technologie-Stack (final)
+
+| Komponente | Wahl | Zweck |
+|---|---|---|
+| Sprache | **Go** | 1 statisches Binary, schneller Start, `go install` |
+| TUI-Framework | **bubbletea** (Charm) | Elm-Architektur (Model/Update/View) |
+| UI-Komponenten | **bubbles** | `list` (mit Fuzzy-Filter), `textinput`, Keys/Help |
+| Styling | **lipgloss** | Layout/Farben/Footer |
+| SSH-Config-Parser | **`github.com/kevinburke/ssh_config`** | OpenSSH-konform: `Include`-Globs, first-match-wins, Symlinks |
+| Logging (optional) | **`log/slog`** (Stdlib) | Diagnose ohne UI-Blocker |
+
+**Begründung (Kurzform):** Ein Launcher profitiert von schnellem Start und einem
+einzigen Binary; die korrekte Config-Semantik (besonders `Include` und
+first-match-wins) liefert `kevinburke/ssh_config` spezifikationsgetreu, statt
+eine fehleranfällige Eigenimplementierung zu bauen. Die aktive
+`ProxyJump`/`ProxyCommand`-Nutzung (3 Vorkommen in der aktuellen Config)
+erzwingt die Delegation an den nativen `ssh`-Client — die TUI ist ein Launcher,
+kein SSH-Reimplementierung.
+
+**Module-Pfad ( Platzhalter, für `go install` zu bestätigen ):**
+`github.com/nibra/stargate` — durch tatsächlichen VCS-Pfad ersetzen.
+
+---
+
+## 2. Modul- / Dateistruktur
+
+```
+stargate/
+├── cmd/stargate/main.go            # Entry: Flags/Env → Config laden → TUI → Auswahl → ssh exec
+├── internal/
+│   ├── config/
+│   │   ├── loader.go               # Pfad-Auflösung (~/.ssh/config, Symlink, Override), Includes
+│   │   ├── host.go                 # Host-Modell + Sichtbarkeits-/ProxyJump-Regeln
+│   │   ├── loader_test.go          # Unit-Tests: Parsing, Include, Wildcard-Filter, Override
+│   │   └── host_test.go
+│   ├── tui/
+│   │   ├── model.go                # Zustand: Hosts, Filter, Cursor, Phase
+│   │   ├── update.go               # Messages: Key/Mouse/Window-Resize
+│   │   ├── view.go                 # Rendering: Liste + Filterzeile + Help/Footer
+│   │   ├── keys.go                 # Keymap + Help-Bindings
+│   │   └── styles.go               # lipgloss-Stile
+│   └── ssh/
+│       ├── executor.go             # ssh als Kindprozess mit TTY-Vererbung; danach Rückkehr
+│       └── exec_unix.go            # SysProcAttr (Setctty/Setsid/Foreground), reines Unix
+├── go.mod / go.sum
+├── README.md                       # Build/Install/Usage
+└── Makefile                        # build / test / install / vet
+```
+
+**Trennung** (`config` / `tui` / `ssh`) hält Parsing-Logik aus der UI und CLI
+heraus (AGENTS.md: Geschäftslogik nicht in Controller/UI-Schichten).
+
+---
+
+## 3. Datenmodell: Host (Felder, keine Implementierung)
+
+Pro sichtbarem Auswahlziel:
+
+| Feld | Quelle | Hinweis |
+|---|---|---|
+| `Alias` | `Host <name>` | Anzeige- und Verbindungsname |
+| `HostName` | effektiv (first-match) | Aufgelöster Zielhost |
+| `User` | effektiv | — |
+| `Port` | effektiv (default 22) | — |
+| `IdentityFile` | effektiv | für Detailanzeige |
+| `ViaJump` | `ProxyJump`/`ProxyCommand` vorhanden? | **bool** → „via Jump-Host"-Badge |
+| `SourceFile` | Include-Herkunft | Diagnose/optionale Anzeige |
+
+Verbindung erfolgt immer über `Alias` (nicht über zusammengebaute
+`user@host:port`), damit ssh **alle** effekti­ven Einstellungen (Jump, Forwards,
+IdentityFile) selbst korrekt anwendet.
+
+---
+
+## 4. Parsing-Logik
+
+Aufbauend auf `kevinburke/ssh_config` (keine Eigenimplementierung):
+
+1. **Pfad ermitteln** (Präzedenz): `--config`-Flag → `STARGATE_CONFIG`-Env →
+   `~/.ssh/config` (HOME auflösen, **Symlink folgen** wie ssh).
+2. **Parsen** über die Library; `Include` mit Globs wird aufgelöst
+   (fehlertolerant bei nicht-matchenden Globs; Zyklen werden von der Lib begrenzt).
+3. **Effektive Werte pro Alias** berechnen (first-match-wins über alle
+   passenden `Host`-Blöcke inkl. `Host *`).
+4. **Sichtbarkeit filtern** („direkt verbinden" gefordert):
+   - Block ausblenden, wenn **alle** Namen Wildcards/Negierung enthalten
+     (`*`, `?`, `!`).
+   - Block mit mehreren Namen (`Host prod prod.example`) → jeden konkreten
+     Namen als eigene Auswahl anbieten.
+5. **`ViaJump`-Flag** setzen, wenn `ProxyJump` oder `ProxyCommand` in der
+   effektiven Konfiguration des Alias vorhanden ist.
+6. **`Match exec …`** wird **nicht** ausgewertet (out of scope). Blöcke mit
+   `Match` werden bei der Alias-Sammlung übergangen.
+
+---
+
+## 5. Interaktionsmodell
+
+**Zustände:** `Browsing` → (optional) `Filtering` → Aktion `Connect` →
+`InSession` (ssh läuft, TUI pausiert) → zurück zu `Browsing`.
+
+| Aktion | Tastatur | Maus |
+|---|---|---|
+| Navigieren | `↑`/`↓`, `j`/`k` | Scrollrad / Klick = auswählen |
+| Filtern | Tippen (Fuzzy über Alias+HostName+User@Host:Port) | — |
+| Filter zurücksetzen | `Esc` | — |
+| Verbinden | `Enter` | **Klick** auf Eintrag |
+| Beenden | `q` / `Ctrl+C` | — |
+
+Maus via `tea.WithMouseCellMotion`. Filter über Bubbles `list`-Filter
+(Fuzzy-Matcher). Bei 10 Hosts kaum nötig, aber skalierbar.
+
+---
+
+## 6. Verbindungsmodell
+
+**Strategie: Kindprozess mit TTY-Vererbung + Rückkehr zur TUI.**
+
+Ablauf:
+1. Auswahl trifft ein → bubbletea verlässt Raw-Modus/Alternate-Screen
+   (passiert automatisch, wenn die UI den Fokus abgibt / wir das Programm in den
+   Hintergrund treten lassen).
+2. `ssh` als **Kindprozess**: `Stdin/Stdout/Stderr = os.Stdin/…`,
+   `SysProcAttr{Setctty: true, Setsid: true, Foreground: true}` (Unix) → ssh
+   erhält das steuernde Terminal.
+3. Auf Beendigung von ssh warten; Exit-Status erfassen.
+4. **TUI wiederherstellen** (Raw-Modus/Alternate-Screen erneut aktivieren) und
+   zurück zu `Browsing` — ggf. kurzer Hinweis bei Exit-Code ≠ 0.
+
+**Warum nicht prozessersetzt (`syscall.Exec`)?** Dann ist keine Rückkehr zur
+TUI möglich — Entscheidung 1 verlangt aber die Rückkehr. Warum **nicht**
+eingettetes PTY? Die aktiven ProxyJump-/ProxyCommand-/Forwarding-Nutzung und
+ssh-Escape-Sequenzen funktionieren nur zuverlässig mit dem nativen Client.
+
+---
+
+## 7. CLI-Oberfläche
+
+```
+stargate [--config PATH]
+```
+
+- `--config PATH`: alternative Config-Datei (Präzedenz über Env).
+- `STARGATE_CONFIG`: Env-Override (unterhalb von `--config`).
+- Ohne TTY an stdout → Abbruch mit klarem Hinweis (TUI braucht Terminal).
+- `ssh` wird in `$PATH` erwartet (Start-Check, sonst klare Fehlermeldung).
+
+---
+
+## 8. Fehlerbehandlung
+
+| Fall | Verhalten |
+|---|---|
+| Config fehlt / Symlink kaputt | Meldung + Hinweis; startbar mit leerer Liste oder Abbruch |
+| Parse-Fehler (Syntax) | Zeile + Kontext; fehlerhaften Block überspringen, Rest laden |
+| Include-Glob ohne Treffer | Warnung, fortfahren (wie ssh) |
+| Keine sichtbaren Hosts | Empty-State („nur Wildcard-Hosts gefunden") |
+| `ssh` nicht in `$PATH` | Start-Check → klare Fehlermeldung |
+| Kein TTY | Abbruch mit Hinweis |
+| Verbindungsfehler | ssh behandelt selbst; Exit-Status nach Rückkehr ggf. anzeigen |
+
+---
+
+## 9. Verteilung
+
+- **`go install github.com/nibra/stargate/cmd/stargate@latest`**
+  (Module-Pfad Platzhalter → durch echten VCS-Pfad ersetzen).
+- Voraussetzungen: öffentliches Repo + Git-Tag für stabile Version.
+- Zusätzlich: `Makefile`-Targets `build`/`test`/`install` (lokal, auf
+  `$GOBIN`).
+- README mit Install/Usage.
+
+---
+
+## 10. Meilensteine / Roadmap (Vorschlag für Umsetzungsphase)
+
+1. **Scaffold & Config:** `go.mod`, `internal/config` (Loader + Host-Modell +
+   Wildcard-Filter + ViaJump) inkl. Unit-Tests. Override via Flag/Env.
+2. **TUI-Shell:** bubbletea `model/update/view`, Liste, Navigation, Filter,
+   Help/Footer.
+3. **SSH-Executor:** Kindprozess mit TTY-Vererbung, Rückkehr zur TUI,
+   Exit-Status-Handling.
+4. **Polish:** Maus-Support, „via Jump-Host"-Badge, Empty-States,
+   Fehlermeldungen.
+5. **Release-Readiness:** README, Makefile, Module-Pfad klären, Git-Tag,
+   `go install`-Smoke-Test.
+
+---
+
+## 11. Explizit out of scope
+
+- `Match exec …` und bedingte Config-Blöcke
+- Gruppierung/Tags (kein native SSH-Config-Konzept)
+- Windows-Unterstützung
+- SFTP / Dateitransfer, Port-Forwarding-UI (läuft über ssh selbst, nicht über die TUI)
+- Eingebettetes PTY / Reimplementierung des SSH-Clients
+- Favoriten/Zuletzt verwendet (nicht angefragt)
