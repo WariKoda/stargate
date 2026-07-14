@@ -7,13 +7,16 @@ import (
 
 type styles struct {
 	app    lipgloss.Style
+	logo   lipgloss.Style
 	accent lipgloss.AdaptiveColor
 }
 
 func newStyles() styles {
+	accent := lipgloss.AdaptiveColor{Light: "#4A2ED6", Dark: "#9B87FF"}
 	return styles{
 		app:    lipgloss.NewStyle().Padding(1, 2),
-		accent: lipgloss.AdaptiveColor{Light: "#4A2ED6", Dark: "#9B87FF"},
+		logo:   lipgloss.NewStyle().Foreground(accent),
+		accent: accent,
 	}
 }
 

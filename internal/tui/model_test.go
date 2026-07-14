@@ -70,6 +70,28 @@ func TestModelRendersHostListAndEmptyState(t *testing.T) {
 	}
 }
 
+func TestModelRendersResponsiveLogo(t *testing.T) {
+	t.Parallel()
+
+	model := New([]appconfig.Host{{Alias: "production", HostName: "prod.example.com", Port: "22"}}, nil, nil)
+	model = updateModel(t, model, tea.WindowSizeMsg{Width: 120, Height: 30})
+
+	if !model.showLogo {
+		t.Fatal("wide terminal does not show the Stargate logo")
+	}
+	if !strings.Contains(model.View(), strings.Split(stargateLogo, "\n")[0]) {
+		t.Error("View() does not contain the Stargate logo")
+	}
+
+	model = updateModel(t, model, tea.WindowSizeMsg{Width: 100, Height: 30})
+	if model.showLogo {
+		t.Error("logo overflows a narrow terminal instead of using the compact title")
+	}
+	if !strings.Contains(model.View(), "Stargate") {
+		t.Error("narrow terminal does not show the compact title")
+	}
+}
+
 func TestModelNavigationAndFuzzyFilter(t *testing.T) {
 	t.Parallel()
 
@@ -351,6 +373,29 @@ func TestModelMouseWheelNavigatesAndClickConnects(t *testing.T) {
 	request, ok := cmd().(connectRequestedMsg)
 	if !ok || request.host.Alias != "second" {
 		t.Fatalf("mouse click request = %#v, want second", request)
+	}
+}
+
+func TestModelMouseClickAccountsForLogo(t *testing.T) {
+	t.Parallel()
+
+	model := New([]appconfig.Host{
+		{Alias: "first", HostName: "first.example.com", Port: "22"},
+		{Alias: "second", HostName: "second.example.com", Port: "22"},
+	}, &stubConnector{}, nil)
+	model = updateModel(t, model, tea.WindowSizeMsg{Width: 120, Height: 30})
+	if index, ok := model.itemIndexAt(3, 14); !ok || index != 1 {
+		t.Fatalf("itemIndexAt() = %d, %t; showLogo=%t list=%dx%d", index, ok, model.showLogo, model.list.Width(), model.list.Height())
+	}
+
+	updated, command := model.Update(mouseMessage(3, 14, tea.MouseButtonLeft))
+	model = modelFromTea(t, updated)
+	selected, ok := model.SelectedHost()
+	if !ok || selected.Alias != "second" {
+		t.Fatalf("mouse click below logo selected %#v, want second", selected)
+	}
+	if command == nil {
+		t.Fatal("mouse click below logo returned nil connection command")
 	}
 }
 

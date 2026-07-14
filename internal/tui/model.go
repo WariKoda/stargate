@@ -38,6 +38,7 @@ type Model struct {
 	requestedHost  *appconfig.Host
 	pendingConnect *appconfig.Host
 	resumeMessage  string
+	showLogo       bool
 }
 
 // Connector builds the native SSH command for a selected host alias.

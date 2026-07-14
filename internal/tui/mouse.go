@@ -38,6 +38,9 @@ func (m Model) itemIndexAt(x, y int) (int, bool) {
 	}
 
 	top := m.styles.app.GetPaddingTop()
+	if m.showLogo {
+		top += logoHeight + logoSpacing
+	}
 	if m.list.ShowTitle() || (m.list.ShowFilter() && m.list.FilteringEnabled()) {
 		top++
 	}

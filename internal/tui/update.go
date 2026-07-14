@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // Update handles terminal, keyboard, filtering, and selection messages.
@@ -122,5 +123,12 @@ func copyCommand(preview string, write func(string) error) tea.Cmd {
 
 func (m *Model) resize(width, height int) {
 	frameWidth, frameHeight := m.styles.app.GetFrameSize()
-	m.list.SetSize(max(0, width-frameWidth), max(0, height-frameHeight))
+	contentWidth := max(0, width-frameWidth)
+	contentHeight := max(0, height-frameHeight)
+
+	m.showLogo = contentWidth >= lipgloss.Width(stargateLogo) && contentHeight >= logoHeight+logoSpacing+hostItemHeight
+	if m.showLogo {
+		contentHeight -= logoHeight + logoSpacing
+	}
+	m.list.SetSize(contentWidth, contentHeight)
 }
