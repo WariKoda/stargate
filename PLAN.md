@@ -4,7 +4,7 @@
 > Auswahl stellt (Tastatur + Maus, mit Filter) und per echtem `ssh`-Client
 > verbindet. Nach Beenden der SSH-Session kehrt die TUI zurück.
 
-**Status:** Meilenstein 1 abgeschlossen; Meilenstein 2 bereit zur Umsetzung.
+**Status:** Meilensteine 1–2 abgeschlossen; Meilenstein 3 bereit zur Umsetzung.
 **Phase:** Umsetzung.
 
 ---
@@ -54,7 +54,9 @@ kein SSH-Reimplementierung.
 
 ```
 stargate/
-├── cmd/stargate/main.go            # Entry: Flags/Env → Config laden → TUI → Auswahl → ssh exec
+├── cmd/stargate/
+│   ├── main.go                     # Entry: Flags/Env → Config laden → TUI → Auswahl → ssh exec
+│   └── main_test.go
 ├── internal/
 │   ├── config/
 │   │   ├── loader.go               # Pfad-Auflösung (~/.ssh/config, Symlink, Override), Includes
@@ -63,6 +65,7 @@ stargate/
 │   │   └── host_test.go
 │   ├── tui/
 │   │   ├── model.go                # Zustand: Hosts, Filter, Cursor, Phase
+│   │   ├── model_test.go
 │   │   ├── update.go               # Messages: Key/Mouse/Window-Resize
 │   │   ├── view.go                 # Rendering: Liste + Filterzeile + Help/Footer
 │   │   ├── keys.go                 # Keymap + Help-Bindings
@@ -133,7 +136,7 @@ Aufbauend auf `kevinburke/ssh_config` (keine Eigenimplementierung):
 | Aktion | Tastatur | Maus |
 |---|---|---|
 | Navigieren | `↑`/`↓`, `j`/`k` | Scrollrad / Klick = auswählen |
-| Filtern | Tippen (Fuzzy über Alias+HostName+User@Host:Port) | — |
+| Filtern | `/` aktiviert den Filter, dann tippen (Fuzzy über Alias+HostName+User@Host:Port) | — |
 | Filter zurücksetzen | `Esc` | — |
 | Verbinden | `Enter` | **Klick** auf Eintrag |
 | Beenden | `q` / `Ctrl+C` | — |
@@ -207,12 +210,11 @@ stargate [--config PATH]
 
 1. **Scaffold & Config — abgeschlossen:** `go.mod`, `internal/config` (Loader +
    Host-Modell + Wildcard-Filter + ViaJump) inkl. Unit-Tests. Override via Flag/Env.
-2. **TUI-Shell — als Nächstes:** bubbletea `model/update/view`, Liste,
-   Navigation, Filter, Help/Footer.
-3. **SSH-Executor:** Kindprozess mit TTY-Vererbung, Rückkehr zur TUI,
-   Exit-Status-Handling.
-4. **Polish:** Maus-Support, „via Jump-Host"-Badge, Empty-States,
-   Fehlermeldungen.
+2. **TUI-Shell — abgeschlossen:** bubbletea `model/update/view`, Liste,
+   Navigation, Fuzzy-Filter, Help/Footer, „via Jump-Host"-Anzeige und CLI-Entry.
+3. **SSH-Executor — als Nächstes:** Kindprozess mit TTY-Vererbung, Rückkehr zur
+   TUI, Exit-Status-Handling.
+4. **Polish:** Maus-Support sowie Feinschliff für Empty-States und Fehlermeldungen.
 5. **Release-Readiness:** README, Makefile, Module-Pfad klären, Git-Tag,
    `go install`-Smoke-Test.
 
