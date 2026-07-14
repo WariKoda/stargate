@@ -46,7 +46,7 @@ func TestModelRendersHostListAndEmptyState(t *testing.T) {
 		Port:     "22",
 		ViaJump:  true,
 	}}
-	model := New(hosts, nil)
+	model := New(hosts, nil, nil)
 	model = updateModel(t, model, tea.WindowSizeMsg{Width: 100, Height: 30})
 
 	view := model.View()
@@ -64,7 +64,7 @@ func TestModelRendersHostListAndEmptyState(t *testing.T) {
 		}
 	}
 
-	empty := New(nil, nil)
+	empty := New(nil, nil, nil)
 	if view := empty.View(); !strings.Contains(view, "No connectable hosts.") {
 		t.Errorf("empty View() = %q, want clear empty state", view)
 	}
@@ -77,7 +77,7 @@ func TestModelNavigationAndFuzzyFilter(t *testing.T) {
 		{Alias: "development", HostName: "dev.example.com", Port: "22"},
 		{Alias: "production", HostName: "prod.example.com", Port: "22"},
 		{Alias: "jumpbox", HostName: "gateway.example.com", Port: "22"},
-	}, nil)
+	}, nil, nil)
 
 	model = updateModel(t, model, tea.KeyMsg{Type: tea.KeyDown})
 	selected, ok := model.SelectedHost()
@@ -103,7 +103,7 @@ func TestModelDirectTypingStartsAndExtendsFilter(t *testing.T) {
 	t.Parallel()
 
 	for _, firstRune := range []rune{'p', 'j', 'k', 'q'} {
-		model := New([]appconfig.Host{{Alias: "project", HostName: "example.com", Port: "22"}}, nil)
+		model := New([]appconfig.Host{{Alias: "project", HostName: "example.com", Port: "22"}}, nil, nil)
 		model = updateModel(t, model, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{firstRune}})
 		if model.list.FilterState() != list.Filtering {
 			t.Errorf("typing %q left filter state at %s", firstRune, model.list.FilterState())
@@ -113,7 +113,7 @@ func TestModelDirectTypingStartsAndExtendsFilter(t *testing.T) {
 		}
 	}
 
-	model := New([]appconfig.Host{{Alias: "project", HostName: "example.com", Port: "22"}}, nil)
+	model := New([]appconfig.Host{{Alias: "project", HostName: "example.com", Port: "22"}}, nil, nil)
 	model.list.SetFilterText("pro")
 	model = updateModel(t, model, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
 	if model.list.FilterState() != list.Filtering || model.list.FilterValue() != "prod" {
@@ -124,7 +124,7 @@ func TestModelDirectTypingStartsAndExtendsFilter(t *testing.T) {
 func TestModelSlashStillStartsFiltering(t *testing.T) {
 	t.Parallel()
 
-	model := New([]appconfig.Host{{Alias: "server", HostName: "example.com", Port: "22"}}, nil)
+	model := New([]appconfig.Host{{Alias: "server", HostName: "example.com", Port: "22"}}, nil, nil)
 	model = updateModel(t, model, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
 	if model.list.FilterState() != list.Filtering {
 		t.Fatalf("FilterState() = %s, want filtering", model.list.FilterState())
@@ -137,7 +137,7 @@ func TestModelSlashStillStartsFiltering(t *testing.T) {
 func TestModelHelpShortcutDoesNotStartFilter(t *testing.T) {
 	t.Parallel()
 
-	model := New([]appconfig.Host{{Alias: "server", HostName: "example.com", Port: "22"}}, nil)
+	model := New([]appconfig.Host{{Alias: "server", HostName: "example.com", Port: "22"}}, nil, nil)
 	model = updateModel(t, model, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
 	if !model.list.Help.ShowAll {
 		t.Error("? did not open extended help")
@@ -147,16 +147,11 @@ func TestModelHelpShortcutDoesNotStartFilter(t *testing.T) {
 	}
 }
 
-func TestModelRunsAndReturnsFromSSHProcess(t *testing.T) {
+func TestModelQuitsToConnect(t *testing.T) {
 	t.Parallel()
 
 	connector := &stubConnector{}
-	model := New([]appconfig.Host{{Alias: "production", HostName: "prod.example.com", Port: "22"}}, connector)
-	var command *exec.Cmd
-	model.runProcess = func(cmd *exec.Cmd, callback tea.ExecCallback) tea.Cmd {
-		command = cmd
-		return func() tea.Msg { return callback(nil) }
-	}
+	model := New([]appconfig.Host{{Alias: "production", HostName: "prod.example.com", Port: "22"}}, connector, nil)
 
 	updated, requestCmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model = modelFromTea(t, updated)
@@ -168,32 +163,22 @@ func TestModelRunsAndReturnsFromSSHProcess(t *testing.T) {
 		t.Fatal("Enter command did not return connectRequestedMsg")
 	}
 
-	updated, processCmd := model.Update(request)
+	updated, quitCmd := model.Update(request)
 	model = modelFromTea(t, updated)
-	if processCmd == nil || command == nil {
-		t.Fatal("connect request did not create a process command")
+	if quitCmd == nil {
+		t.Fatal("connect request did not return quit command")
 	}
-	if !model.Connecting() {
-		t.Error("Connecting() = false while SSH process is active")
-	}
-	if got := command.Args; len(got) != 3 || got[2] != "production" {
-		t.Errorf("SSH command args = %#v, want selected alias", got)
+	if _, ok := quitCmd().(tea.QuitMsg); !ok {
+		t.Fatalf("connect request returned %T, want tea.QuitMsg", quitCmd())
 	}
 
-	finished, ok := processCmd().(connectionFinishedMsg)
-	if !ok {
-		t.Fatal("process command did not return connectionFinishedMsg")
-	}
-	model = updateModel(t, model, finished)
-	if model.Connecting() {
-		t.Error("Connecting() = true after SSH process ended")
+	host, ok := model.PendingConnect()
+	if !ok || host.Alias != "production" {
+		t.Fatalf("PendingConnect() = %#v, %t; want production", host, ok)
 	}
 	requested, ok := model.RequestedHost()
 	if !ok || requested.Alias != "production" {
 		t.Fatalf("RequestedHost() = %#v, %t; want production", requested, ok)
-	}
-	if !strings.Contains(model.View(), "SSH-Sitzung beendet: production") {
-		t.Error("View() does not show completed SSH session status")
 	}
 }
 
@@ -204,13 +189,7 @@ func TestModelClearsFilterAfterSSHSession(t *testing.T) {
 		{Alias: "development", HostName: "dev.example.com", Port: "22"},
 		{Alias: "production", HostName: "prod.example.com", Port: "22"},
 	}
-	model := New(hosts, &stubConnector{})
-	model.list.SetFilterText("prod")
-	if len(model.list.VisibleItems()) != 1 {
-		t.Fatal("test setup did not filter the host list")
-	}
-
-	model = updateModel(t, model, connectionFinishedMsg{host: hosts[1]})
+	model := New(hosts, &stubConnector{}, &SessionResume{Host: hosts[1]})
 	if model.list.FilterState() != list.Unfiltered {
 		t.Errorf("FilterState() = %s, want unfiltered", model.list.FilterState())
 	}
@@ -230,14 +209,20 @@ func TestModelShowsConnectorAndExitErrors(t *testing.T) {
 	t.Parallel()
 
 	host := appconfig.Host{Alias: "broken", HostName: "broken.example.com", Port: "22"}
-	model := New([]appconfig.Host{host}, &stubConnector{err: errors.New("cannot build command")})
+	model := New([]appconfig.Host{host}, &stubConnector{err: errors.New("cannot build command")}, nil)
 	model = updateModel(t, model, connectRequestedMsg{host: host})
 	if !strings.Contains(model.View(), "cannot build command") {
 		t.Error("View() does not show connector error")
 	}
 
-	exitError := exec.Command("sh", "-c", "exit 23").Run()
-	model = updateModel(t, model, connectionFinishedMsg{host: host, err: exitError})
+	model = New([]appconfig.Host{host}, &stubConnector{}, &SessionResume{
+		Host: host,
+		Err:  exec.Command("sh", "-c", "exit 23").Run(),
+	})
+	model = updateModel(t, model, tea.WindowSizeMsg{Width: 100, Height: 30})
+	if cmd := model.Init(); cmd != nil {
+		model = updateModel(t, model, cmd())
+	}
 	if !strings.Contains(model.View(), "Exit-Code 23") {
 		t.Error("View() does not show SSH exit code")
 	}
@@ -247,7 +232,7 @@ func TestModelHandlesMissingConnector(t *testing.T) {
 	t.Parallel()
 
 	host := appconfig.Host{Alias: "server", HostName: "example.com", Port: "22"}
-	model := New([]appconfig.Host{host}, nil)
+	model := New([]appconfig.Host{host}, nil, nil)
 	model = updateModel(t, model, connectRequestedMsg{host: host})
 	if !strings.Contains(model.View(), "kein Executor") {
 		t.Error("View() does not show missing executor error")
@@ -260,7 +245,7 @@ func TestModelMouseWheelNavigatesAndClickConnects(t *testing.T) {
 	model := New([]appconfig.Host{
 		{Alias: "first", HostName: "first.example.com", Port: "22"},
 		{Alias: "second", HostName: "second.example.com", Port: "22"},
-	}, &stubConnector{})
+	}, &stubConnector{}, nil)
 
 	model = updateModel(t, model, mouseMessage(3, 3, tea.MouseButtonWheelDown))
 	selected, ok := model.SelectedHost()
@@ -290,7 +275,7 @@ func TestModelMouseIgnoresSpacingAndOutsideClicks(t *testing.T) {
 	model := New([]appconfig.Host{
 		{Alias: "first", HostName: "first.example.com", Port: "22"},
 		{Alias: "second", HostName: "second.example.com", Port: "22"},
-	}, &stubConnector{})
+	}, &stubConnector{}, nil)
 
 	for _, message := range []tea.MouseMsg{
 		mouseMessage(3, 5, tea.MouseButtonLeft), // spacing after the first item
@@ -313,7 +298,7 @@ func TestModelMouseIgnoresSpacingAndOutsideClicks(t *testing.T) {
 func TestModelEnterDoesNotConnectWhileFiltering(t *testing.T) {
 	t.Parallel()
 
-	model := New([]appconfig.Host{{Alias: "server", HostName: "example.com", Port: "22"}}, nil)
+	model := New([]appconfig.Host{{Alias: "server", HostName: "example.com", Port: "22"}}, nil, nil)
 	model = updateModel(t, model, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
 	model = updateModel(t, model, tea.KeyMsg{Type: tea.KeyEnter})
 

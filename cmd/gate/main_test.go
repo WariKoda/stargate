@@ -5,6 +5,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -23,6 +24,46 @@ func TestRunRejectsPositionalArguments(t *testing.T) {
 	err := run([]string{"unexpected"})
 	if err == nil || !strings.Contains(err.Error(), "unexpected arguments") {
 		t.Fatalf("run(unexpected) error = %v", err)
+	}
+}
+
+func TestSSHEnvironmentMirrorsGhosttyWrapper(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		environ []string
+		want    []string
+	}{
+		{
+			name:    "ssh-env falls back to widely supported terminfo",
+			environ: []string{"PATH=/usr/bin", "TERM=xterm-ghostty", "GHOSTTY_SHELL_FEATURES=path,ssh-env,title"},
+			want:    []string{"PATH=/usr/bin", "GHOSTTY_SHELL_FEATURES=path,ssh-env,title", "TERM=xterm-256color"},
+		},
+		{
+			name:    "ssh-terminfo also has a safe fallback",
+			environ: []string{"TERM=xterm-ghostty", "GHOSTTY_SHELL_FEATURES=ssh-terminfo"},
+			want:    []string{"GHOSTTY_SHELL_FEATURES=ssh-terminfo", "TERM=xterm-256color"},
+		},
+		{
+			name:    "Ghostty without SSH integration remains unchanged",
+			environ: []string{"TERM=xterm-ghostty", "GHOSTTY_SHELL_FEATURES=path,title"},
+			want:    []string{"TERM=xterm-ghostty", "GHOSTTY_SHELL_FEATURES=path,title"},
+		},
+		{
+			name:    "other terminals remain unchanged",
+			environ: []string{"TERM=screen-256color", "GHOSTTY_SHELL_FEATURES=ssh-env"},
+			want:    []string{"TERM=screen-256color", "GHOSTTY_SHELL_FEATURES=ssh-env"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			if got := sshEnvironment(test.environ); !slices.Equal(got, test.want) {
+				t.Errorf("sshEnvironment() = %#v, want %#v", got, test.want)
+			}
+		})
 	}
 }
 

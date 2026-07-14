@@ -29,31 +29,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 
+	case showResumeStatusMsg:
+		return m, m.list.NewStatusMessage(msg.message)
+
 	case connectRequestedMsg:
 		host := msg.host
 		m.requestedHost = &host
 		if m.connector == nil {
 			return m, m.list.NewStatusMessage("SSH fehlgeschlagen: kein Executor konfiguriert")
 		}
-
-		command, err := m.connector.Command(host.Alias)
-		if err != nil {
+		if _, err := m.connector.Command(host.Alias); err != nil {
 			return m, m.list.NewStatusMessage(connectionFinishedStatus(host, err))
 		}
 
-		m.connecting = true
-		return m, m.runProcess(command, func(err error) tea.Msg {
-			return connectionFinishedMsg{host: host, err: err}
-		})
-
-	case connectionFinishedMsg:
-		m.connecting = false
-		selectedIndex := m.list.GlobalIndex()
-		m.list.ResetFilter()
-		if selectedIndex >= 0 && selectedIndex < len(m.list.Items()) {
-			m.list.Select(selectedIndex)
-		}
-		return m, m.list.NewStatusMessage(connectionFinishedStatus(msg.host, msg.err))
+		m.pendingConnect = &host
+		return m, tea.Quit
 	}
 
 	var cmd tea.Cmd
