@@ -4,8 +4,8 @@
 > Auswahl stellt (Tastatur + Maus, mit Filter) und per echtem `ssh`-Client
 > verbindet. Nach Beenden der SSH-Session kehrt die TUI zurück.
 
-**Status:** Plan finalisiert, bereit zur Umsetzung.
-**Phase:** Planung (noch kein Implementierungscode erzeugt).
+**Status:** Meilenstein 1 abgeschlossen; Meilenstein 2 bereit zur Umsetzung.
+**Phase:** Umsetzung.
 
 ---
 
@@ -33,13 +33,14 @@
 | TUI-Framework | **bubbletea** (Charm) | Elm-Architektur (Model/Update/View) |
 | UI-Komponenten | **bubbles** | `list` (mit Fuzzy-Filter), `textinput`, Keys/Help |
 | Styling | **lipgloss** | Layout/Farben/Footer |
-| SSH-Config-Parser | **`github.com/kevinburke/ssh_config`** | OpenSSH-konform: `Include`-Globs, first-match-wins, Symlinks |
+| SSH-Config-Parser | **`github.com/kevinburke/ssh_config`** | OpenSSH-nahe Host-/Include-Semantik und first-match-wins; Symlinks löst Stargate auf |
 | Logging (optional) | **`log/slog`** (Stdlib) | Diagnose ohne UI-Blocker |
 
 **Begründung (Kurzform):** Ein Launcher profitiert von schnellem Start und einem
-einzigen Binary; die korrekte Config-Semantik (besonders `Include` und
-first-match-wins) liefert `kevinburke/ssh_config` spezifikationsgetreu, statt
-eine fehleranfällige Eigenimplementierung zu bauen. Die aktive
+einzigen Binary; die relevante Config-Semantik (besonders `Include` und
+first-match-wins) liefert `kevinburke/ssh_config`, statt eine fehleranfällige
+Eigenimplementierung zu bauen. Da die Library enthaltene Aliase nicht öffentlich
+exponiert, ergänzt Stargate sie um einen kleinen AST-Walker für die Alias-Ermittlung. Die aktive
 `ProxyJump`/`ProxyCommand`-Nutzung (3 Vorkommen in der aktuellen Config)
 erzwingt die Delegation an den nativen `ssh`-Client — die TUI ist ein Launcher,
 kein SSH-Reimplementierung.
@@ -107,17 +108,20 @@ Aufbauend auf `kevinburke/ssh_config` (keine Eigenimplementierung):
    `~/.ssh/config` (HOME auflösen, **Symlink folgen** wie ssh).
 2. **Parsen** über die Library; `Include` mit Globs wird aufgelöst
    (fehlertolerant bei nicht-matchenden Globs; Zyklen werden von der Lib begrenzt).
-3. **Effektive Werte pro Alias** berechnen (first-match-wins über alle
+3. **Aliase ermitteln:** Ein AST-Walker traversiert Root- und Include-Dateien,
+   weil die Library enthaltene Host-Blöcke nicht öffentlich exponiert. Dabei wird
+   nur die bereits geparste AST-Struktur ausgewertet, keine eigene Grammatik gebaut.
+4. **Effektive Werte pro Alias** berechnen (first-match-wins über alle
    passenden `Host`-Blöcke inkl. `Host *`).
-4. **Sichtbarkeit filtern** („direkt verbinden" gefordert):
+5. **Sichtbarkeit filtern** („direkt verbinden" gefordert):
    - Block ausblenden, wenn **alle** Namen Wildcards/Negierung enthalten
      (`*`, `?`, `!`).
    - Block mit mehreren Namen (`Host prod prod.example`) → jeden konkreten
      Namen als eigene Auswahl anbieten.
-5. **`ViaJump`-Flag** setzen, wenn `ProxyJump` oder `ProxyCommand` in der
-   effektiven Konfiguration des Alias vorhanden ist.
-6. **`Match exec …`** wird **nicht** ausgewertet (out of scope). Blöcke mit
-   `Match` werden bei der Alias-Sammlung übergangen.
+6. **`ViaJump`-Flag** setzen, wenn `ProxyJump` oder `ProxyCommand` in der
+   effektiven Konfiguration des Alias vorhanden und nicht `none` ist.
+7. **`Match exec …`** wird **nicht** ausgewertet (out of scope); die Library
+   lehnt es sicher ab. Andere `Match`-Blöcke werden bei der Alias-Sammlung übergangen.
 
 ---
 
@@ -179,7 +183,7 @@ stargate [--config PATH]
 | Fall | Verhalten |
 |---|---|
 | Config fehlt / Symlink kaputt | Meldung + Hinweis; startbar mit leerer Liste oder Abbruch |
-| Parse-Fehler (Syntax) | Zeile + Kontext; fehlerhaften Block überspringen, Rest laden |
+| Parse-Fehler (Syntax) | Fehler mit Datei-/Parser-Kontext; vollständig abbrechen, da Teil-Parsing first-match-/Include-Semantik verfälschen könnte |
 | Include-Glob ohne Treffer | Warnung, fortfahren (wie ssh) |
 | Keine sichtbaren Hosts | Empty-State („nur Wildcard-Hosts gefunden") |
 | `ssh` nicht in `$PATH` | Start-Check → klare Fehlermeldung |
@@ -201,10 +205,10 @@ stargate [--config PATH]
 
 ## 10. Meilensteine / Roadmap (Vorschlag für Umsetzungsphase)
 
-1. **Scaffold & Config:** `go.mod`, `internal/config` (Loader + Host-Modell +
-   Wildcard-Filter + ViaJump) inkl. Unit-Tests. Override via Flag/Env.
-2. **TUI-Shell:** bubbletea `model/update/view`, Liste, Navigation, Filter,
-   Help/Footer.
+1. **Scaffold & Config — abgeschlossen:** `go.mod`, `internal/config` (Loader +
+   Host-Modell + Wildcard-Filter + ViaJump) inkl. Unit-Tests. Override via Flag/Env.
+2. **TUI-Shell — als Nächstes:** bubbletea `model/update/view`, Liste,
+   Navigation, Filter, Help/Footer.
 3. **SSH-Executor:** Kindprozess mit TTY-Vererbung, Rückkehr zur TUI,
    Exit-Status-Handling.
 4. **Polish:** Maus-Support, „via Jump-Host"-Badge, Empty-States,
