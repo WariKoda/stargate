@@ -1,0 +1,33 @@
+name: Feature request
+description: Suggest a change to Stargate
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Stargate is deliberately a small SSH **launcher**. Windows support,
+        `Match exec`, grouping/tags, SFTP, and an embedded PTY are explicitly out
+        of scope — see [CONTRIBUTING.md](https://github.com/nibra180/stargate-tui/blob/main/CONTRIBUTING.md).
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the situation you run into, not the solution yet.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: >
+        Including whether the native ssh client or your ssh_config can already
+        do this.

@@ -1,0 +1,63 @@
+name: Bug report
+description: Something in Stargate does not work as documented
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please do **not** use this form for security
+        vulnerabilities — see [SECURITY.md](https://github.com/nibra180/stargate-tui/blob/main/SECURITY.md) instead.
+
+        Replace any real hostnames, usernames, and IP addresses before posting.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you expected, and what happened instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Run `gate --config ...`
+        2. Type `...`
+        3. Press `...`
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Minimal ssh_config that reproduces this
+      description: >
+        The smallest config showing the problem, with real hostnames replaced by
+        example.com. Leave empty if the issue is unrelated to config parsing.
+      render: text
+
+  - type: input
+    id: version
+    attributes:
+      label: Stargate version
+      description: The release tag, or the commit hash if built from source.
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: OS and terminal
+      placeholder: "Arch Linux, foot 1.17 / macOS 14.5, iTerm2 3.5"
+    validations:
+      required: true
+
+  - type: input
+    id: ssh-version
+    attributes:
+      label: OpenSSH version
+      description: Output of `ssh -V`.
+    validations:
+      required: true

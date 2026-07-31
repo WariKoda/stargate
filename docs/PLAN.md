@@ -4,8 +4,11 @@
 > Auswahl stellt (Tastatur + Maus, mit Filter) und per echtem `ssh`-Client
 > verbindet. Nach Beenden der SSH-Session kehrt die TUI zurück.
 
-**Status:** Meilensteine 1–5 technisch abgeschlossen; Release-Commit und Versionstag ausstehend.
-**Phase:** Umsetzung.
+> **Hinweis:** Dies ist das ursprüngliche Design-Dokument aus der Entwurfsphase,
+> auf Deutsch verfasst und als Kontext für Contributors erhalten. Es beschreibt
+> die getroffenen Architekturentscheidungen und deren Begründung, nicht den
+> tagesaktuellen Stand. Verbindlich für das Verhalten sind der Code und die
+> [README](../README.md).
 
 ---
 
@@ -42,10 +45,9 @@
 einzigen Binary; die relevante Config-Semantik (besonders `Include` und
 first-match-wins) liefert `kevinburke/ssh_config`, statt eine fehleranfällige
 Eigenimplementierung zu bauen. Da die Library enthaltene Aliase nicht öffentlich
-exponiert, ergänzt Stargate sie um einen kleinen AST-Walker für die Alias-Ermittlung. Die aktive
-`ProxyJump`/`ProxyCommand`-Nutzung (3 Vorkommen in der aktuellen Config)
-erzwingt die Delegation an den nativen `ssh`-Client — die TUI ist ein Launcher,
-kein SSH-Reimplementierung.
+exponiert, ergänzt Stargate sie um einen kleinen AST-Walker für die Alias-Ermittlung.
+Die Unterstützung von `ProxyJump`/`ProxyCommand` erzwingt die Delegation an den
+nativen `ssh`-Client — die TUI ist ein Launcher, keine SSH-Reimplementierung.
 
 **Kanonischer Module-Pfad:** `github.com/nibra180/stargate-tui`
 (abgeleitet aus dem konfigurierten Git-Remote).
@@ -77,14 +79,17 @@ stargate/
 │   └── ssh/
 │       ├── executor.go             # Native ssh-Command-Erzeugung mit geladener Config
 │       └── executor_test.go
+├── .github/workflows/ci.yml        # test -race + vet auf Linux und macOS
+├── docs/PLAN.md                    # dieses Dokument
 ├── .gitignore                      # Build-/Coverage-Artefakte
 ├── go.mod / go.sum
-├── README.md                       # Installation, Bedienung, Entwicklung, Release
+├── README.md                       # Installation, Bedienung, Entwicklung
+├── CONTRIBUTING.md / SECURITY.md / RELEASING.md
 └── Makefile                        # build / test / vet / check / coverage / install / clean
 ```
 
-**Trennung** (`config` / `tui` / `ssh`) hält Parsing-Logik aus der UI und CLI
-heraus (AGENTS.md: Geschäftslogik nicht in Controller/UI-Schichten).
+**Trennung** (`config` / `tui` / `ssh`) hält Parsing-Logik aus der UI und der CLI
+heraus: Geschäftslogik gehört nicht in Controller- oder UI-Schichten.
 
 ---
 
@@ -172,7 +177,7 @@ Ablauf:
 
 **Warum nicht prozessersetzt (`syscall.Exec`)?** Dann ist keine Rückkehr zur
 TUI möglich — Entscheidung 1 verlangt aber die Rückkehr. Warum **nicht**
-eingettetes PTY? Die aktiven ProxyJump-/ProxyCommand-/Forwarding-Nutzung und
+eingebettetes PTY? ProxyJump, ProxyCommand, Port-Forwarding und
 ssh-Escape-Sequenzen funktionieren nur zuverlässig mit dem nativen Client.
 
 ---
@@ -206,32 +211,31 @@ gate [--config PATH]
 
 ## 9. Verteilung
 
-- **`go install github.com/nibra180/stargate-tui/cmd/gate@latest`** nach
-  Push des ersten Releases. Private Repositories benötigen passende Git-/`GOPRIVATE`-Konfiguration.
+- **`go install github.com/nibra180/stargate-tui/cmd/gate@latest`** als
+  primärer Verteilweg.
 - Kanonischer Module-Pfad stimmt mit dem Git-Remote überein.
 - `Makefile`-Targets für Build, Test, Vet, Check, Coverage, Install und Clean.
-- README mit Installation, Bedienung, Config-Semantik und Release-Checkliste.
-- Lokaler `go install ./cmd/gate`-Smoke-Test ist erfolgreich; Remote-`@latest`
-  folgt nach Commit, Push und Versionstag.
+- README mit Installation, Bedienung und Config-Semantik; Release-Schritte in
+  [RELEASING.md](../RELEASING.md).
 
 ---
 
-## 10. Meilensteine / Roadmap (Vorschlag für Umsetzungsphase)
+## 10. Umsetzung in Meilensteinen
 
-1. **Scaffold & Config — abgeschlossen:** `go.mod`, `internal/config` (Loader +
-   Host-Modell + Wildcard-Filter + ViaJump) inkl. Unit-Tests. Override via Flag/Env.
-2. **TUI-Shell — abgeschlossen:** bubbletea `model/update/view`, Liste,
-   Navigation, Fuzzy-Filter, Help/Footer, „via Jump-Host"-Anzeige und CLI-Entry.
-3. **SSH-Executor — abgeschlossen:** nativer Kindprozess über `tea.ExecProcess`,
-   geladene Config via `-F`, sichere Alias-Trennung via `--`, Rückkehr zur TUI und
+Die ursprüngliche Roadmap, in der Reihenfolge, in der sie umgesetzt wurde:
+
+1. **Scaffold & Config:** `go.mod`, `internal/config` (Loader + Host-Modell +
+   Wildcard-Filter + ViaJump) inkl. Unit-Tests. Override via Flag/Env.
+2. **TUI-Shell:** bubbletea `model/update/view`, Liste, Navigation,
+   Fuzzy-Filter, Help/Footer, „via Jump-Host"-Anzeige und CLI-Entry.
+3. **SSH-Executor:** nativer Kindprozess über `tea.ExecProcess`, geladene Config
+   via `-F`, sichere Alias-Trennung via `--`, Rückkehr zur TUI und
    Exit-Status-Handling.
-4. **Polish — abgeschlossen:** Mouse-Cell-Motion, Mausrad-Navigation,
-   Direktverbindung per Klick, direkter Type-to-filter-Einstieg, präziser
-   Empty-State, längere Statusmeldungen und TTY-Validierung.
-5. **Release-Readiness — technisch abgeschlossen:** README, Makefile,
-   `.gitignore`, kanonischer Module-Pfad und lokaler `go install`-Smoke-Test.
-   Ausstehend sind nur Release-Commit, öffentliche/private Go-Modul-Konfiguration
-   und ein explizit gewählter SemVer-Tag.
+4. **Polish:** Mouse-Cell-Motion, Mausrad-Navigation, Direktverbindung per
+   Klick, direkter Type-to-filter-Einstieg, präziser Empty-State, längere
+   Statusmeldungen und TTY-Validierung.
+5. **Release-Readiness:** README, Makefile, `.gitignore`, kanonischer
+   Module-Pfad und `go install`-Smoke-Test.
 
 ---
 

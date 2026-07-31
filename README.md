@@ -136,20 +136,14 @@ directory:
 GOBIN="$(mktemp -d)" go install ./cmd/gate
 ```
 
-## Release checklist
+## Contributing
 
-1. Run `make check` and the PTY smoke tests.
-2. Commit all release changes.
-3. Create a semantic version tag, for example `v0.1.0`.
-4. Push the commit and tag to GitHub. Make the repository public, or document
-   the required Git authentication and `GOPRIVATE` settings.
-5. Verify:
-
-   ```sh
-   go install github.com/nibra180/stargate-tui/cmd/gate@v0.1.0
-   ```
-
-No release tag is created automatically by the build.
+Bug reports, feature requests, and pull requests are welcome. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for the workflow and
+[SECURITY.md](SECURITY.md) for the security model and how to report
+vulnerabilities. The original design document is kept in
+[docs/PLAN.md](docs/PLAN.md); maintainer release steps are in
+[RELEASING.md](RELEASING.md).
 
 ## Current limitations
 
