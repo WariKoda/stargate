@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	appconfig "github.com/nibra180/stargate-tui/internal/config"
+	appconfig "github.com/warikoda/stargate/internal/config"
 )
 
 func TestCheckDialsConfiguredHostAndPort(t *testing.T) {

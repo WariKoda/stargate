@@ -28,8 +28,8 @@ You need Go (the version in `go.mod` or newer), an OpenSSH client in `$PATH`,
 and a Unix-like system.
 
 ```sh
-git clone https://github.com/nibra180/stargate-tui
-cd stargate-tui
+git clone https://github.com/warikoda/stargate
+cd stargate
 make check
 ```
 
@@ -93,3 +93,8 @@ For security vulnerabilities, do not open a public issue; follow
 ## Code of conduct
 
 This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md).
+
+## License
+
+By contributing, you agree that your contributions will be licensed under the
+[MIT License](LICENSE) that covers this project.

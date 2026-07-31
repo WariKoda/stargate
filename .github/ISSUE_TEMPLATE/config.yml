@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Report a security vulnerability
-    url: https://github.com/nibra180/stargate-tui/security/advisories/new
+    url: https://github.com/warikoda/stargate/security/advisories/new
     about: Please report security issues privately, never as a public issue.
   - name: Question or usage help
-    url: https://github.com/nibra180/stargate-tui/discussions
+    url: https://github.com/warikoda/stargate/discussions
     about: Ask questions about using Stargate here.

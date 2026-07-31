@@ -14,9 +14,10 @@ only. Please reproduce a report against the newest tag or `main` before filing.
 Please do **not** open a public issue for a security problem.
 
 Report it privately through GitHub's
-[private vulnerability reporting](https://github.com/nibra180/stargate-tui/security/advisories/new)
-(Security → Report a vulnerability). If that is unavailable to you, email
-niklasbraun123@gmail.com with `[stargate-tui security]` in the subject.
+[private vulnerability reporting](https://github.com/warikoda/stargate/security/advisories/new)
+(Security → Report a vulnerability). If that form is unavailable to you, open a
+regular issue asking for a private contact channel — **without** any details of
+the vulnerability itself.
 
 Please include the affected version, your operating system and OpenSSH version,
 a minimal `ssh_config` snippet that reproduces the issue (with real hostnames

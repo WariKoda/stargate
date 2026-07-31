@@ -16,13 +16,11 @@ forwarding therefore continue to work as configured.
 
 ## Installation
 
-Install the latest published version after the first release has been pushed:
+Install the latest release:
 
 ```sh
-go install github.com/nibra180/stargate-tui/cmd/gate@latest
+go install github.com/warikoda/stargate/cmd/gate@latest
 ```
-
-For a private repository, configure Git authentication and `GOPRIVATE` first.
 
 Ensure that your Go binary directory (`$GOBIN`, or usually `$(go env
 GOPATH)/bin`) is included in `$PATH`.
@@ -144,6 +142,10 @@ Bug reports, feature requests, and pull requests are welcome. See
 vulnerabilities. The original design document is kept in
 [docs/PLAN.md](docs/PLAN.md); maintainer release steps are in
 [RELEASING.md](RELEASING.md).
+
+## License
+
+[MIT](LICENSE) © WariKoda
 
 ## Current limitations
 

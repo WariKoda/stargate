@@ -59,8 +59,11 @@ representative at an online or offline event.
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported to the community leaders responsible for enforcement at
-niklasbraun123@gmail.com.
+reported to the project maintainer [@WariKoda](https://github.com/WariKoda).
+
+If the report concerns the maintainer, or you need a channel outside this
+project, use GitHub's [report abuse](https://github.com/contact/report-abuse)
+form, which reaches GitHub Support directly.
 
 All complaints will be reviewed and investigated promptly and fairly.
 

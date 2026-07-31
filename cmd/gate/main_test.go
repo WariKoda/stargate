@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	sshexecutor "github.com/nibra180/stargate-tui/internal/ssh"
+	sshexecutor "github.com/warikoda/stargate/internal/ssh"
 )
 
 func TestRunHandlesHelpBeforeLoadingConfig(t *testing.T) {

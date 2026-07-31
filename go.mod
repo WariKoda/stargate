@@ -1,4 +1,4 @@
-module github.com/nibra180/stargate-tui
+module github.com/warikoda/stargate
 
 go 1.24.2
 

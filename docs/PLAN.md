@@ -49,7 +49,7 @@ exponiert, ergänzt Stargate sie um einen kleinen AST-Walker für die Alias-Ermi
 Die Unterstützung von `ProxyJump`/`ProxyCommand` erzwingt die Delegation an den
 nativen `ssh`-Client — die TUI ist ein Launcher, keine SSH-Reimplementierung.
 
-**Kanonischer Module-Pfad:** `github.com/nibra180/stargate-tui`
+**Kanonischer Module-Pfad:** `github.com/warikoda/stargate`
 (abgeleitet aus dem konfigurierten Git-Remote).
 
 ---
@@ -211,7 +211,7 @@ gate [--config PATH]
 
 ## 9. Verteilung
 
-- **`go install github.com/nibra180/stargate-tui/cmd/gate@latest`** als
+- **`go install github.com/warikoda/stargate/cmd/gate@latest`** als
   primärer Verteilweg.
 - Kanonischer Module-Pfad stimmt mit dem Git-Remote überein.
 - `Makefile`-Targets für Build, Test, Vet, Check, Coverage, Install und Clean.

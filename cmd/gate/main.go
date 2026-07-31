@@ -11,10 +11,10 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/term"
 
-	appconfig "github.com/nibra180/stargate-tui/internal/config"
-	"github.com/nibra180/stargate-tui/internal/connectivity"
-	sshexecutor "github.com/nibra180/stargate-tui/internal/ssh"
-	"github.com/nibra180/stargate-tui/internal/tui"
+	appconfig "github.com/warikoda/stargate/internal/config"
+	"github.com/warikoda/stargate/internal/connectivity"
+	sshexecutor "github.com/warikoda/stargate/internal/ssh"
+	"github.com/warikoda/stargate/internal/tui"
 )
 
 func main() {

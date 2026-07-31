@@ -9,7 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 
-	appconfig "github.com/nibra180/stargate-tui/internal/config"
+	appconfig "github.com/warikoda/stargate/internal/config"
 )
 
 func TestHostItemPresentationAndFilterValue(t *testing.T) {

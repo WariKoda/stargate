@@ -29,7 +29,7 @@ automatically by the build.
    to pick up the tag:
 
    ```sh
-   GOBIN="$(mktemp -d)" go install github.com/nibra180/stargate-tui/cmd/gate@v0.1.0
+   GOBIN="$(mktemp -d)" go install github.com/warikoda/stargate/cmd/gate@v0.1.0
    ```
 
 7. Create the GitHub release from the tag and summarize the user-visible
@@ -45,5 +45,5 @@ change in a minor release; such changes are called out in the release notes.
 
 `go install ...@latest` requires the module path to be publicly resolvable. If
 the repository is private, consumers must configure Git authentication and
-`GOPRIVATE=github.com/nibra180/*` themselves — document this in the README if
+`GOPRIVATE=github.com/warikoda/*` themselves — document this in the README if
 that stays the case.

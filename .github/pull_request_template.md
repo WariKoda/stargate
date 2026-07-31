@@ -15,5 +15,5 @@ e.g. filtering, connecting, and returning cleanly from a session.
 - [ ] Tests cover the changed behavior
 - [ ] No real hostnames, usernames, or IP addresses in code, tests, or docs
 - [ ] Documentation updated if behavior, keybindings, or flags changed
-- [ ] If `internal/ssh` changed: [SECURITY.md](https://github.com/nibra180/stargate-tui/blob/main/SECURITY.md) still
+- [ ] If `internal/ssh` changed: [SECURITY.md](https://github.com/warikoda/stargate/blob/main/SECURITY.md) still
       describes the command construction accurately
