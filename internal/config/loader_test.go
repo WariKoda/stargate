@@ -9,7 +9,7 @@ import (
 )
 
 func TestResolvePathPrecedenceAndSymlinks(t *testing.T) {
-	home := t.TempDir()
+	home := testHomeDir(t)
 	t.Setenv("HOME", home)
 
 	defaultPath := filepath.Join(home, ".ssh", "config")
@@ -69,7 +69,7 @@ func TestResolvePathRejectsMissingAndUnsupportedHomePath(t *testing.T) {
 }
 
 func TestLoadDiscoversIncludedAndConcreteHosts(t *testing.T) {
-	home := t.TempDir()
+	home := testHomeDir(t)
 	t.Setenv("HOME", home)
 
 	includeDir := filepath.Join(home, "includes")
@@ -203,6 +203,19 @@ func TestResolveIncludePattern(t *testing.T) {
 			t.Errorf("resolveIncludePattern(%q) = %q, want %q", input, got, want)
 		}
 	}
+}
+
+// testHomeDir returns a temporary directory with symlinks already resolved.
+// On macOS t.TempDir() sits under /var, which is a symlink to /private/var,
+// while ResolvePath deliberately resolves symlinks like ssh does. Comparing
+// against the raw path would fail there for reasons unrelated to the test.
+func testHomeDir(t *testing.T) string {
+	t.Helper()
+	home, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatalf("resolve temporary directory: %v", err)
+	}
+	return home
 }
 
 func writeTestFile(t *testing.T, path, content string) {
