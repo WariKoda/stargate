@@ -8,6 +8,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	appconfig "github.com/warikoda/stargate/internal/config"
 )
@@ -65,8 +66,115 @@ func TestModelRendersHostListAndEmptyState(t *testing.T) {
 	}
 
 	empty := New(nil, nil, nil)
+	if empty.showDetails {
+		t.Error("empty host list reserves space for a detail panel")
+	}
 	if view := empty.View(); !strings.Contains(view, "No connectable hosts.") {
 		t.Errorf("empty View() = %q, want clear empty state", view)
+	}
+}
+
+func TestModelRendersSelectedHostDetails(t *testing.T) {
+	t.Parallel()
+
+	hosts := []appconfig.Host{
+		{
+			Alias:        "production",
+			HostName:     "prod.example.com",
+			User:         "deploy",
+			Port:         "2200",
+			IdentityFile: "~/.ssh/production",
+			ProxyJump:    "bastion",
+			ViaJump:      true,
+			SourceFile:   "/ssh/production",
+		},
+		{
+			Alias:        "maintenance",
+			HostName:     "maintenance.example.com",
+			Port:         "22",
+			ProxyCommand: "nc %h %p",
+			ViaJump:      true,
+			SourceFile:   "/home/user/.ssh/config",
+		},
+	}
+	model := New(hosts, nil, nil)
+	model = updateModel(t, model, tea.WindowSizeMsg{Width: 100, Height: 30})
+
+	if !model.showDetails {
+		t.Fatal("terminal with sufficient room does not show host details")
+	}
+	for _, expected := range []string{
+		"Details · maintenance",
+		"Host name",
+		"maintenance.example.com",
+		"SSH default",
+		"/home/user/.ssh/config",
+		"ProxyCommand: nc %h %p",
+	} {
+		if !strings.Contains(model.View(), expected) {
+			t.Errorf("View() does not contain detail %q", expected)
+		}
+	}
+
+	model = updateModel(t, model, tea.KeyMsg{Type: tea.KeyDown})
+	for _, expected := range []string{
+		"Details · production",
+		"prod.example.com",
+		"deploy",
+		"2200",
+		"~/.ssh/production",
+		"/ssh/production",
+		"ProxyJump via bastion",
+	} {
+		if !strings.Contains(model.View(), expected) {
+			t.Errorf("details did not follow selection; View() does not contain %q", expected)
+		}
+	}
+}
+
+func TestModelTruncatesDetailsToAvailableWidth(t *testing.T) {
+	t.Parallel()
+
+	model := New([]appconfig.Host{{
+		Alias:      "production",
+		HostName:   "very-long-🌍-hostname.example.com",
+		Port:       "22",
+		SourceFile: "/a/very/long/path/to/an/included/ssh/config/file",
+	}}, nil, nil)
+	model = updateModel(t, model, tea.WindowSizeMsg{Width: 100, Height: 30})
+
+	details := model.hostDetailsView()
+	if !strings.Contains(details, "…") {
+		t.Error("long detail values are not truncated")
+	}
+	for _, line := range strings.Split(details, "\n") {
+		if width := lipgloss.Width(line); width > model.detailWidth {
+			t.Errorf("detail line width = %d, panel width = %d: %q", width, model.detailWidth, line)
+		}
+	}
+}
+
+func TestModelStacksDetailsOrHidesThemWhenSpaceIsLimited(t *testing.T) {
+	t.Parallel()
+
+	model := New([]appconfig.Host{{Alias: "production", HostName: "prod.example.com", Port: "22"}}, nil, nil)
+	model = updateModel(t, model, tea.WindowSizeMsg{Width: 80, Height: 24})
+	if !model.showDetails || model.detailsBeside {
+		t.Fatalf("medium terminal detail layout: show=%t beside=%t, want stacked details", model.showDetails, model.detailsBeside)
+	}
+	if !strings.Contains(model.View(), "Details · production") {
+		t.Error("medium terminal does not render stacked host details")
+	}
+
+	model = updateModel(t, model, tea.WindowSizeMsg{Width: 80, Height: 12})
+	if model.showDetails {
+		t.Fatal("short terminal shows details instead of preserving list space")
+	}
+	if strings.Contains(model.View(), "Details ·") {
+		t.Error("short terminal renders hidden host details")
+	}
+	if !strings.Contains(model.View(), "production") {
+		t.Error("short terminal no longer renders the host list")
 	}
 }
 
@@ -92,6 +200,31 @@ func TestModelRendersResponsiveLogo(t *testing.T) {
 	}
 }
 
+func TestModelSortsHostsAlphabeticallyWithoutMutatingInput(t *testing.T) {
+	t.Parallel()
+
+	hosts := []appconfig.Host{
+		{Alias: "zulu", HostName: "zulu.example.com", Port: "22"},
+		{Alias: "Alpha", HostName: "alpha.example.com", Port: "22"},
+		{Alias: "bravo", HostName: "bravo.example.com", Port: "22"},
+	}
+	model := New(hosts, nil, nil)
+
+	if hosts[0].Alias != "zulu" {
+		t.Errorf("New() mutated input order; first alias = %q", hosts[0].Alias)
+	}
+	for index, want := range []string{"Alpha", "bravo", "zulu"} {
+		item, ok := model.list.Items()[index].(hostItem)
+		if !ok || item.host.Alias != want {
+			t.Errorf("item %d = %#v, want alias %q", index, model.list.Items()[index], want)
+		}
+	}
+	selected, ok := model.SelectedHost()
+	if !ok || selected.Alias != "Alpha" {
+		t.Errorf("initial selection = %#v, %t; want Alpha", selected, ok)
+	}
+}
+
 func TestModelNavigationAndFuzzyFilter(t *testing.T) {
 	t.Parallel()
 
@@ -103,8 +236,8 @@ func TestModelNavigationAndFuzzyFilter(t *testing.T) {
 
 	model = updateModel(t, model, tea.KeyMsg{Type: tea.KeyDown})
 	selected, ok := model.SelectedHost()
-	if !ok || selected.Alias != "production" {
-		t.Fatalf("SelectedHost() = %#v, %t; want production", selected, ok)
+	if !ok || selected.Alias != "jumpbox" {
+		t.Fatalf("SelectedHost() = %#v, %t; want jumpbox", selected, ok)
 	}
 
 	model.list.SetFilterText("gateway")
@@ -384,6 +517,12 @@ func TestModelMouseClickAccountsForLogo(t *testing.T) {
 		{Alias: "second", HostName: "second.example.com", Port: "22"},
 	}, &stubConnector{}, nil)
 	model = updateModel(t, model, tea.WindowSizeMsg{Width: 120, Height: 30})
+	if !model.detailsBeside {
+		t.Fatal("wide terminal does not render details beside the list")
+	}
+	if _, ok := model.itemIndexAt(2+model.list.Width()+1, 14); ok {
+		t.Fatal("detail gutter is treated as a host list item")
+	}
 	if index, ok := model.itemIndexAt(3, 14); !ok || index != 1 {
 		t.Fatalf("itemIndexAt() = %d, %t; showLogo=%t list=%dx%d", index, ok, model.showLogo, model.list.Width(), model.list.Height())
 	}

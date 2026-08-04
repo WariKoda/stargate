@@ -126,9 +126,23 @@ func (m *Model) resize(width, height int) {
 	contentWidth := max(0, width-frameWidth)
 	contentHeight := max(0, height-frameHeight)
 
-	m.showLogo = contentWidth >= lipgloss.Width(stargateLogo) && contentHeight >= logoHeight+logoSpacing+hostItemHeight
+	m.showLogo = contentWidth >= lipgloss.Width(stargateLogo) && contentHeight >= logoHeight+logoSpacing+minimumListHeight
 	if m.showLogo {
 		contentHeight -= logoHeight + logoSpacing
 	}
-	m.list.SetSize(contentWidth, contentHeight)
+
+	hasHosts := len(m.list.Items()) > 0
+	m.detailsBeside = hasHosts && contentHeight >= minimumListHeight && contentWidth >= minimumListWidth+detailGap+minimumDetailWidth
+	m.showDetails = m.detailsBeside || (hasHosts && contentWidth >= minimumDetailWidth && contentHeight >= minimumListHeight+detailHeight+detailSpacing)
+	m.detailWidth = 0
+
+	listWidth := contentWidth
+	if m.detailsBeside {
+		m.detailWidth = min(maximumDetailWidth, contentWidth-minimumListWidth-detailGap)
+		listWidth -= m.detailWidth + detailGap
+	} else if m.showDetails {
+		m.detailWidth = contentWidth
+		contentHeight -= detailHeight + detailSpacing
+	}
+	m.list.SetSize(listWidth, contentHeight)
 }

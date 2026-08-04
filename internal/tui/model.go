@@ -1,9 +1,11 @@
 package tui
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"os/exec"
+	"slices"
 	"strings"
 	"time"
 
@@ -15,10 +17,17 @@ import (
 )
 
 const (
-	defaultWidth    = 80
-	defaultHeight   = 24
-	hostItemHeight  = 2
-	hostItemSpacing = 1
+	defaultWidth       = 80
+	defaultHeight      = 24
+	hostItemHeight     = 2
+	hostItemSpacing    = 1
+	detailHeight       = 7
+	detailSpacing      = 1
+	detailGap          = 2
+	minimumDetailWidth = 32
+	maximumDetailWidth = 44
+	minimumListWidth   = 56
+	minimumListHeight  = 13
 )
 
 // SessionResume carries SSH session results into the next TUI iteration.
@@ -39,6 +48,9 @@ type Model struct {
 	pendingConnect *appconfig.Host
 	resumeMessage  string
 	showLogo       bool
+	showDetails    bool
+	detailsBeside  bool
+	detailWidth    int
 }
 
 // Connector builds the native SSH command for a selected host alias.
@@ -138,8 +150,13 @@ func New(hosts []appconfig.Host, connector Connector, resume *SessionResume, con
 		connectivity = connectivityOptions[0]
 	}
 
-	items := make([]list.Item, 0, len(hosts))
-	for _, host := range hosts {
+	sortedHosts := append([]appconfig.Host(nil), hosts...)
+	slices.SortStableFunc(sortedHosts, func(left, right appconfig.Host) int {
+		return cmp.Compare(strings.ToLower(left.Alias), strings.ToLower(right.Alias))
+	})
+
+	items := make([]list.Item, 0, len(sortedHosts))
+	for _, host := range sortedHosts {
 		state := connectivityUnchecked
 		if connectivity.Checker != nil && connectivity.CheckOnStart {
 			state = connectivityChecking

@@ -81,6 +81,12 @@ The config path is selected in this order:
 Printable keys, including `j`, `k`, and `q`, are filter input. This keeps direct
 typing unambiguous; navigation uses the arrow keys.
 
+When the terminal has enough room, a detail panel beside or below the list
+shows the selected host's effective hostname, user, port, identity file, source
+config file, and direct, `ProxyJump`, or `ProxyCommand` route. Long values are
+truncated to the available width, and the panel is hidden in short or very
+narrow terminals so the host list remains usable.
+
 When an SSH session ends, Stargate restores the full, unfiltered host list,
 keeps the connected host selected, and remains available for the next connection.
 Command copying uses the operating system clipboard and reports an error when no

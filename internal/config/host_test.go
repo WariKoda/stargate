@@ -45,6 +45,12 @@ Host *
 	if host.IdentityFile != "~/.ssh/production" {
 		t.Errorf("IdentityFile = %q, want ~/.ssh/production", host.IdentityFile)
 	}
+	if host.ProxyJump != "bastion" {
+		t.Errorf("ProxyJump = %q, want bastion", host.ProxyJump)
+	}
+	if host.ProxyCommand != "" {
+		t.Errorf("ProxyCommand = %q, want empty", host.ProxyCommand)
+	}
 	if !host.ViaJump {
 		t.Error("ViaJump = false, want true")
 	}
@@ -89,6 +95,12 @@ Host direct
 	host, err := buildHost(cfg, "direct", "/tmp/config")
 	if err != nil {
 		t.Fatalf("build host: %v", err)
+	}
+	if host.ProxyJump != "none" {
+		t.Errorf("ProxyJump = %q, want none", host.ProxyJump)
+	}
+	if host.ProxyCommand != "NONE" {
+		t.Errorf("ProxyCommand = %q, want NONE", host.ProxyCommand)
 	}
 	if host.ViaJump {
 		t.Error("ViaJump = true, want false")

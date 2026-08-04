@@ -13,6 +13,8 @@ type Host struct {
 	User         string
 	Port         string
 	IdentityFile string
+	ProxyJump    string
+	ProxyCommand string
 	ViaJump      bool
 	SourceFile   string
 }
@@ -59,6 +61,8 @@ func buildHost(cfg *sshconfig.Config, alias, sourceFile string) (Host, error) {
 		User:         user,
 		Port:         port,
 		IdentityFile: identityFile,
+		ProxyJump:    proxyJump,
+		ProxyCommand: proxyCommand,
 		ViaJump:      activeProxy(proxyJump) || activeProxy(proxyCommand),
 		SourceFile:   sourceFile,
 	}, nil
