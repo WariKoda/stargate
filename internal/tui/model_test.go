@@ -178,28 +178,6 @@ func TestModelStacksDetailsOrHidesThemWhenSpaceIsLimited(t *testing.T) {
 	}
 }
 
-func TestModelRendersResponsiveLogo(t *testing.T) {
-	t.Parallel()
-
-	model := New([]appconfig.Host{{Alias: "production", HostName: "prod.example.com", Port: "22"}}, nil, nil)
-	model = updateModel(t, model, tea.WindowSizeMsg{Width: 120, Height: 30})
-
-	if !model.showLogo {
-		t.Fatal("wide terminal does not show the Stargate logo")
-	}
-	if !strings.Contains(model.View(), strings.Split(stargateLogo, "\n")[0]) {
-		t.Error("View() does not contain the Stargate logo")
-	}
-
-	model = updateModel(t, model, tea.WindowSizeMsg{Width: 100, Height: 30})
-	if model.showLogo {
-		t.Error("logo overflows a narrow terminal instead of using the compact title")
-	}
-	if !strings.Contains(model.View(), "Stargate") {
-		t.Error("narrow terminal does not show the compact title")
-	}
-}
-
 func TestModelSortsHostsAlphabeticallyWithoutMutatingInput(t *testing.T) {
 	t.Parallel()
 
@@ -254,29 +232,22 @@ func TestModelNavigationAndFuzzyFilter(t *testing.T) {
 	}
 }
 
-func TestModelDirectTypingStartsAndExtendsFilter(t *testing.T) {
+func TestModelRequiresSlashToStartFiltering(t *testing.T) {
 	t.Parallel()
 
-	for _, firstRune := range []rune{'p', 'j', 'k', 'q'} {
+	for _, typedRune := range []rune{'p', 'j', 'k'} {
 		model := New([]appconfig.Host{{Alias: "project", HostName: "example.com", Port: "22"}}, nil, nil)
-		model = updateModel(t, model, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{firstRune}})
-		if model.list.FilterState() != list.Filtering {
-			t.Errorf("typing %q left filter state at %s", firstRune, model.list.FilterState())
+		model = updateModel(t, model, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{typedRune}})
+		if model.list.FilterState() != list.Unfiltered {
+			t.Errorf("typing %q changed filter state to %s", typedRune, model.list.FilterState())
 		}
-		if got := model.list.FilterValue(); got != string(firstRune) {
-			t.Errorf("typing %q set filter to %q", firstRune, got)
+		if got := model.list.FilterValue(); got != "" {
+			t.Errorf("typing %q set filter to %q", typedRune, got)
 		}
-	}
-
-	model := New([]appconfig.Host{{Alias: "project", HostName: "example.com", Port: "22"}}, nil, nil)
-	model.list.SetFilterText("pro")
-	model = updateModel(t, model, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
-	if model.list.FilterState() != list.Filtering || model.list.FilterValue() != "prod" {
-		t.Errorf("typing after applied filter produced state=%s value=%q", model.list.FilterState(), model.list.FilterValue())
 	}
 }
 
-func TestModelSlashStillStartsFiltering(t *testing.T) {
+func TestModelSlashStartsFiltering(t *testing.T) {
 	t.Parallel()
 
 	model := New([]appconfig.Host{{Alias: "server", HostName: "example.com", Port: "22"}}, nil, nil)
@@ -286,6 +257,28 @@ func TestModelSlashStillStartsFiltering(t *testing.T) {
 	}
 	if model.list.FilterValue() != "" {
 		t.Errorf("slash shortcut set filter value to %q, want empty", model.list.FilterValue())
+	}
+}
+
+func TestModelQuitsWithQButNotEscape(t *testing.T) {
+	t.Parallel()
+
+	model := New([]appconfig.Host{{Alias: "server", HostName: "example.com", Port: "22"}}, nil, nil)
+	updated, command := model.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model = modelFromTea(t, updated)
+	if command != nil {
+		t.Fatal("Esc returned a command outside the filter")
+	}
+	if model.list.FilterState() != list.Unfiltered {
+		t.Errorf("Esc changed filter state to %s", model.list.FilterState())
+	}
+
+	_, command = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	if command == nil {
+		t.Fatal("q did not return a quit command")
+	}
+	if _, ok := command().(tea.QuitMsg); !ok {
+		t.Fatalf("q returned %T, want tea.QuitMsg", command())
 	}
 }
 
@@ -509,7 +502,7 @@ func TestModelMouseWheelNavigatesAndClickConnects(t *testing.T) {
 	}
 }
 
-func TestModelMouseClickAccountsForLogo(t *testing.T) {
+func TestModelMouseClickWorksWithSideDetails(t *testing.T) {
 	t.Parallel()
 
 	model := New([]appconfig.Host{
@@ -520,21 +513,21 @@ func TestModelMouseClickAccountsForLogo(t *testing.T) {
 	if !model.detailsBeside {
 		t.Fatal("wide terminal does not render details beside the list")
 	}
-	if _, ok := model.itemIndexAt(2+model.list.Width()+1, 14); ok {
+	if _, ok := model.itemIndexAt(2+model.list.Width()+1, 6); ok {
 		t.Fatal("detail gutter is treated as a host list item")
 	}
-	if index, ok := model.itemIndexAt(3, 14); !ok || index != 1 {
-		t.Fatalf("itemIndexAt() = %d, %t; showLogo=%t list=%dx%d", index, ok, model.showLogo, model.list.Width(), model.list.Height())
+	if index, ok := model.itemIndexAt(3, 6); !ok || index != 1 {
+		t.Fatalf("itemIndexAt() = %d, %t; list=%dx%d", index, ok, model.list.Width(), model.list.Height())
 	}
 
-	updated, command := model.Update(mouseMessage(3, 14, tea.MouseButtonLeft))
+	updated, command := model.Update(mouseMessage(3, 6, tea.MouseButtonLeft))
 	model = modelFromTea(t, updated)
 	selected, ok := model.SelectedHost()
 	if !ok || selected.Alias != "second" {
-		t.Fatalf("mouse click below logo selected %#v, want second", selected)
+		t.Fatalf("mouse click selected %#v, want second", selected)
 	}
 	if command == nil {
-		t.Fatal("mouse click below logo returned nil connection command")
+		t.Fatal("mouse click returned nil connection command")
 	}
 }
 

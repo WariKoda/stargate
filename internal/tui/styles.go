@@ -7,20 +7,24 @@ import (
 
 type styles struct {
 	app         lipgloss.Style
-	logo        lipgloss.Style
 	detailTitle lipgloss.Style
 	detailLabel lipgloss.Style
-	accent      lipgloss.AdaptiveColor
+	accent      lipgloss.TerminalColor
+	muted       lipgloss.TerminalColor
+	foreground  lipgloss.TerminalColor
+	accentText  lipgloss.TerminalColor
 }
 
 func newStyles() styles {
-	accent := lipgloss.AdaptiveColor{Light: "#4A2ED6", Dark: "#9B87FF"}
+	colors := loadPalette()
 	return styles{
 		app:         lipgloss.NewStyle().Padding(1, 2),
-		logo:        lipgloss.NewStyle().Foreground(accent),
-		detailTitle: lipgloss.NewStyle().Bold(true).Foreground(accent),
-		detailLabel: lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#6B5FA8", Dark: "#AFA3D8"}),
-		accent:      accent,
+		detailTitle: lipgloss.NewStyle().Bold(true).Foreground(colors.accent),
+		detailLabel: lipgloss.NewStyle().Foreground(colors.muted),
+		accent:      colors.accent,
+		muted:       colors.muted,
+		foreground:  colors.foreground,
+		accentText:  colors.accentText,
 	}
 }
 
@@ -33,17 +37,28 @@ func newHostDelegate(appStyles styles) list.DefaultDelegate {
 		Foreground(appStyles.accent)
 	delegate.Styles.SelectedDesc = delegate.Styles.SelectedDesc.
 		BorderForeground(appStyles.accent).
-		Foreground(lipgloss.AdaptiveColor{Light: "#6B5FA8", Dark: "#AFA3D8"})
+		Foreground(appStyles.muted)
 	delegate.Styles.FilterMatch = delegate.Styles.FilterMatch.Foreground(appStyles.accent)
 	return delegate
 }
 
 func applyListStyles(hostList *list.Model, appStyles styles) {
+	helpKey := lipgloss.NewStyle().Foreground(appStyles.foreground).Bold(true)
+	helpDescription := lipgloss.NewStyle().Foreground(appStyles.foreground)
+	helpSeparator := lipgloss.NewStyle().Foreground(appStyles.muted)
+
 	hostList.Styles.Title = hostList.Styles.Title.
 		Background(appStyles.accent).
-		Foreground(lipgloss.AdaptiveColor{Light: "#FFFFFF", Dark: "#111111"}).
+		Foreground(appStyles.accentText).
 		Padding(0, 1)
 	hostList.Styles.FilterPrompt = hostList.Styles.FilterPrompt.Foreground(appStyles.accent)
 	hostList.Styles.FilterCursor = hostList.Styles.FilterCursor.Foreground(appStyles.accent)
 	hostList.Styles.StatusBarActiveFilter = hostList.Styles.StatusBarActiveFilter.Foreground(appStyles.accent)
+	hostList.Help.Styles.ShortKey = helpKey
+	hostList.Help.Styles.ShortDesc = helpDescription
+	hostList.Help.Styles.ShortSeparator = helpSeparator
+	hostList.Help.Styles.Ellipsis = helpSeparator
+	hostList.Help.Styles.FullKey = helpKey
+	hostList.Help.Styles.FullDesc = helpDescription
+	hostList.Help.Styles.FullSeparator = helpSeparator
 }

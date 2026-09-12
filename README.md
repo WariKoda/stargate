@@ -68,7 +68,7 @@ The config path is selected in this order:
 | Action | Keyboard | Mouse |
 |---|---|---|
 | Navigate | `↑`/`↓` | Scroll wheel |
-| Filter | Start typing (`/` remains optional) | — |
+| Filter | `/`, then type | — |
 | Apply filter | `Enter` | — |
 | Clear/cancel filter | `Esc` | — |
 | Connect | `Enter` | Left-click a host |
@@ -76,10 +76,10 @@ The config path is selected in this order:
 | Copy SSH command | `Ctrl+Y` | — |
 | Check selected host | `Ctrl+R` | — |
 | Toggle extended help | `?` | — |
-| Quit | `Ctrl+C`, or `Esc` when no filter is active | — |
+| Quit | `q` or `Ctrl+C` | — |
 
-Printable keys, including `j`, `k`, and `q`, are filter input. This keeps direct
-typing unambiguous; navigation uses the arrow keys.
+Filtering starts only after `/` is pressed. While browsing, `q` quits and `Esc`
+has no effect. While filtering, `Esc` cancels or clears the filter.
 
 When the terminal has enough room, a detail panel beside or below the list
 shows the selected host's effective hostname, user, port, identity file, source
@@ -98,6 +98,18 @@ timeout and a bounded number of connections. They only test direct TCP access to
 effective `HostName` and `Port`; they do not authenticate and do not traverse
 `ProxyJump` or `ProxyCommand` routes. A failed direct check therefore does not
 necessarily mean that a host configured through a jump host is unreachable.
+
+### Theme colors
+
+Stargate uses the terminal palette by default and detects Omarchy themes from
+`$XDG_STATE_HOME/omarchy/current/theme/colors.toml` (normally
+`~/.local/state/omarchy/current/theme/colors.toml`). The older location below
+`$XDG_CONFIG_HOME` is supported as a fallback.
+
+Set `STARGATE_THEME` to `auto`, `ansi`, `omarchy`, or `default`. `auto` is the
+default: it loads the current Omarchy colors when available and otherwise uses
+ANSI terminal colors. `default` restores Stargate's original violet palette.
+`STARGATE_THEME_FILE` can point to another Omarchy-compatible `colors.toml`.
 
 ## SSH config behavior
 

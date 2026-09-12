@@ -7,7 +7,6 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 // Update handles terminal, keyboard, filtering, and selection messages.
@@ -17,9 +16,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.resize(msg.Width, msg.Height)
 
 	case tea.KeyMsg:
-		if m.shouldStartDirectFilter(msg) {
-			return m.startDirectFilter(msg)
-		}
 		if m.list.FilterState() != list.Filtering {
 			switch {
 			case key.Matches(msg, m.keys.connect):
@@ -125,11 +121,6 @@ func (m *Model) resize(width, height int) {
 	frameWidth, frameHeight := m.styles.app.GetFrameSize()
 	contentWidth := max(0, width-frameWidth)
 	contentHeight := max(0, height-frameHeight)
-
-	m.showLogo = contentWidth >= lipgloss.Width(stargateLogo) && contentHeight >= logoHeight+logoSpacing+minimumListHeight
-	if m.showLogo {
-		contentHeight -= logoHeight + logoSpacing
-	}
 
 	hasHosts := len(m.list.Items()) > 0
 	m.detailsBeside = hasHosts && contentHeight >= minimumListHeight && contentWidth >= minimumListWidth+detailGap+minimumDetailWidth

@@ -47,7 +47,6 @@ type Model struct {
 	requestedHost  *appconfig.Host
 	pendingConnect *appconfig.Host
 	resumeMessage  string
-	showLogo       bool
 	showDetails    bool
 	detailsBeside  bool
 	detailWidth    int

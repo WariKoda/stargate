@@ -46,6 +46,6 @@ func configureListKeyMap(hostList *list.Model) {
 	hostList.KeyMap.GoToStart.SetHelp("home", "go to start")
 	hostList.KeyMap.GoToEnd.SetKeys("end")
 	hostList.KeyMap.GoToEnd.SetHelp("end", "go to end")
-	hostList.KeyMap.Quit.SetKeys("esc")
-	hostList.KeyMap.Quit.SetHelp("esc", "quit")
+	hostList.KeyMap.Quit.SetKeys("q")
+	hostList.KeyMap.Quit.SetHelp("q", "quit")
 }

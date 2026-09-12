@@ -17,8 +17,5 @@ func (m Model) View() string {
 			content += "\n\n" + details
 		}
 	}
-	if m.showLogo {
-		content = m.styles.logo.Render(stargateLogo) + "\n\n" + content
-	}
 	return m.styles.app.Render(content)
 }
