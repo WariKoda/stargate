@@ -1,11 +1,14 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+
+	sshconfig "github.com/kevinburke/ssh_config"
 )
 
 func TestResolvePathPrecedenceAndSymlinks(t *testing.T) {
@@ -173,19 +176,144 @@ Host visible
 	}
 }
 
-func TestLoadRejectsUnsupportedMatchExec(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config")
-	writeTestFile(t, path, `
-Match exec "true"
-    User conditional
+func TestLoadSkipsMatchBlocksItCannotEvaluate(t *testing.T) {
+	home := testHomeDir(t)
+	t.Setenv("HOME", home)
+
+	marker := filepath.Join(home, "executed")
+	writeTestFile(t, filepath.Join(home, ".ssh", "conditional.conf"), "Host from-conditional-include\n")
+	writeTestFile(t, filepath.Join(home, ".ssh", "config.d", "work.conf"), `
+Match user root
+    User root-only
+Host work
+    HostName work.example.com
 `)
 
-	_, err := Load(path)
-	if err == nil {
-		t.Fatal("Load(Match exec) returned nil error")
+	path := filepath.Join(home, ".ssh", "config")
+	writeTestFile(t, path, `
+Include config.d/*.conf
+Match exec "touch `+marker+`"
+    ProxyCommand evil
+    Include conditional.conf
+Match host visible exec "true"
+    User mixed
+Match originalhost visible
+    Port 2222
+Match canonical all
+    User canonical
+Host visible
+    User regular
+Match all
+    Port 2200
+`)
+
+	result, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
 	}
-	if !strings.Contains(strings.ToLower(err.Error()), "match exec") {
-		t.Fatalf("Load(Match exec) error = %q, want Match Exec context", err)
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatalf("Match exec command was executed (stat err = %v)", err)
+	}
+
+	byAlias := make(map[string]Host, len(result.Hosts))
+	for _, host := range result.Hosts {
+		byAlias[host.Alias] = host
+	}
+	if len(byAlias) != 2 || byAlias["work"].Alias == "" || byAlias["visible"].Alias == "" {
+		t.Fatalf("Hosts = %#v, want work and visible", result.Hosts)
+	}
+	visible := byAlias["visible"]
+	if visible.User != "regular" || visible.Port != "2200" || visible.ProxyCommand != "" {
+		t.Errorf("visible = %#v, want User regular, Port 2200 from Match all, no ProxyCommand", visible)
+	}
+	if work := byAlias["work"]; work.User != "" {
+		t.Errorf("work User = %q, want empty because Match user is skipped", work.User)
+	}
+}
+
+func TestLoadIncludesQuotedPathsWithSpaces(t *testing.T) {
+	home := testHomeDir(t)
+	t.Setenv("HOME", home)
+
+	includedPath := filepath.Join(home, "with space", "hosts.conf")
+	writeTestFile(t, includedPath, "Host spaced\n    User included\n")
+	path := filepath.Join(home, "config")
+	writeTestFile(t, path, `Include "`+includedPath+`" # trailing comment
+Host *
+    User fallback
+`)
+
+	result, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(result.Hosts) != 1 || result.Hosts[0].Alias != "spaced" || result.Hosts[0].User != "included" {
+		t.Fatalf("Hosts = %#v, want spaced with User included", result.Hosts)
+	}
+}
+
+func TestLoadRejectsIncludeCycles(t *testing.T) {
+	home := testHomeDir(t)
+	t.Setenv("HOME", home)
+
+	path := filepath.Join(home, "config")
+	writeTestFile(t, path, "Include "+path+"\nHost loop\n")
+
+	if _, err := Load(path); !errors.Is(err, sshconfig.ErrDepthExceeded) {
+		t.Fatalf("Load(cycle) error = %v, want ErrDepthExceeded", err)
+	}
+}
+
+func TestLoadReportsWhetherPathWasExplicit(t *testing.T) {
+	home := testHomeDir(t)
+	t.Setenv("HOME", home)
+	defaultPath := filepath.Join(home, ".ssh", "config")
+	writeTestFile(t, defaultPath, "Host default\n")
+
+	t.Setenv(ConfigEnvironment, "")
+	result, err := Load("")
+	if err != nil {
+		t.Fatalf("Load(default): %v", err)
+	}
+	if result.Explicit {
+		t.Error("default config reported as explicit")
+	}
+
+	t.Setenv(ConfigEnvironment, defaultPath)
+	result, err = Load("")
+	if err != nil {
+		t.Fatalf("Load(environment): %v", err)
+	}
+	if !result.Explicit {
+		t.Error("STARGATE_CONFIG reported as not explicit")
+	}
+
+	t.Setenv(ConfigEnvironment, "")
+	result, err = Load(defaultPath)
+	if err != nil {
+		t.Fatalf("Load(explicit): %v", err)
+	}
+	if !result.Explicit {
+		t.Error("--config path reported as not explicit")
+	}
+}
+
+func TestSplitArguments(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string][]string{
+		`a b`:               {"a", "b"},
+		`"a b" c`:           {"a b", "c"},
+		`a # comment`:       {"a"},
+		`a#b`:               {"a#b"},
+		`"#quoted" # c`:     {"#quoted"},
+		`host  web   # end`: {"host", "web"},
+		``:                  nil,
+	}
+	for input, want := range tests {
+		if got := splitArguments(input); !reflect.DeepEqual(got, want) {
+			t.Errorf("splitArguments(%q) = %#v, want %#v", input, got, want)
+		}
 	}
 }
 

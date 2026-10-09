@@ -1,16 +1,13 @@
 package config
 
 import (
-	"strings"
 	"testing"
-
-	sshconfig "github.com/kevinburke/ssh_config"
 )
 
 func TestBuildHostUsesEffectiveValuesAndDefaults(t *testing.T) {
 	t.Parallel()
 
-	cfg, err := sshconfig.Decode(strings.NewReader(`
+	doc := parseTestDocument(t, `
 Host production
     HostName prod.example.com
     User deploy
@@ -20,15 +17,9 @@ Host production
 Host *
     User fallback
     Port 2200
-`))
-	if err != nil {
-		t.Fatalf("decode config: %v", err)
-	}
+`)
 
-	host, err := buildHost(cfg, "production", "/tmp/config")
-	if err != nil {
-		t.Fatalf("build host: %v", err)
-	}
+	host := buildHost(doc, "production", "/tmp/config")
 
 	if host.Alias != "production" {
 		t.Errorf("Alias = %q, want production", host.Alias)
@@ -62,15 +53,9 @@ Host *
 func TestBuildHostFallsBackToAliasAndDefaultPort(t *testing.T) {
 	t.Parallel()
 
-	cfg, err := sshconfig.Decode(strings.NewReader("Host local\n"))
-	if err != nil {
-		t.Fatalf("decode config: %v", err)
-	}
+	doc := parseTestDocument(t, "Host local\n")
 
-	host, err := buildHost(cfg, "local", "/tmp/config")
-	if err != nil {
-		t.Fatalf("build host: %v", err)
-	}
+	host := buildHost(doc, "local", "/tmp/config")
 
 	if host.HostName != "local" {
 		t.Errorf("HostName = %q, want local", host.HostName)
@@ -83,19 +68,13 @@ func TestBuildHostFallsBackToAliasAndDefaultPort(t *testing.T) {
 func TestBuildHostTreatsNoneAsNoJump(t *testing.T) {
 	t.Parallel()
 
-	cfg, err := sshconfig.Decode(strings.NewReader(`
+	doc := parseTestDocument(t, `
 Host direct
     ProxyJump none
     ProxyCommand NONE
-`))
-	if err != nil {
-		t.Fatalf("decode config: %v", err)
-	}
+`)
 
-	host, err := buildHost(cfg, "direct", "/tmp/config")
-	if err != nil {
-		t.Fatalf("build host: %v", err)
-	}
+	host := buildHost(doc, "direct", "/tmp/config")
 	if host.ProxyJump != "none" {
 		t.Errorf("ProxyJump = %q, want none", host.ProxyJump)
 	}
@@ -104,6 +83,37 @@ Host direct
 	}
 	if host.ViaJump {
 		t.Error("ViaJump = true, want false")
+	}
+}
+
+func TestBuildHostExpandsHostNameTokens(t *testing.T) {
+	t.Parallel()
+
+	doc := parseTestDocument(t, `
+Host web literal
+    HostName %h.corp.example
+Host literal
+    HostName 100%%-%h-%x
+`)
+
+	if host := buildHost(doc, "web", "/tmp/config"); host.HostName != "web.corp.example" {
+		t.Errorf("HostName = %q, want web.corp.example", host.HostName)
+	}
+	if host := buildHost(doc, "literal", "/tmp/config"); host.HostName != "literal.corp.example" {
+		t.Errorf("first HostName wins: got %q, want literal.corp.example", host.HostName)
+	}
+
+	tests := map[string]string{
+		"%h.example": "alias.example",
+		"100%%":      "100%",
+		"%%h":        "%h",
+		"keep%x":     "keep%x",
+		"trailing%":  "trailing%",
+	}
+	for input, want := range tests {
+		if got := expandHostName(input, "alias"); got != want {
+			t.Errorf("expandHostName(%q) = %q, want %q", input, got, want)
+		}
 	}
 }
 
@@ -125,4 +135,13 @@ func TestIsConcreteAlias(t *testing.T) {
 			t.Errorf("isConcreteAlias(%q) = %t, want %t", pattern, got, want)
 		}
 	}
+}
+
+func parseTestDocument(t *testing.T, content string) *document {
+	t.Helper()
+	doc, err := parseDocument("/tmp/config", []byte(content), t.TempDir(), 0)
+	if err != nil {
+		t.Fatalf("parse config: %v", err)
+	}
+	return doc
 }
