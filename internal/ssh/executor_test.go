@@ -46,21 +46,34 @@ func TestPreviewQuotesTheExactCommand(t *testing.T) {
 	}
 }
 
-func TestNewRejectsMissingBinaryAndConfig(t *testing.T) {
+func TestNewRejectsMissingBinary(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 
 	if _, err := New("/tmp/config"); err == nil || !strings.Contains(err.Error(), "PATH") {
 		t.Fatalf("New without ssh error = %v, want PATH context", err)
 	}
+}
 
+func TestCommandOmitsConfigFlagWithoutExplicitConfig(t *testing.T) {
 	binDir := t.TempDir()
 	binaryPath := filepath.Join(binDir, binaryName)
 	if err := os.WriteFile(binaryPath, []byte("#!/bin/sh\n"), 0o700); err != nil {
 		t.Fatalf("write fake ssh: %v", err)
 	}
 	t.Setenv("PATH", binDir)
-	if _, err := New("  "); err == nil || !strings.Contains(err.Error(), "config path") {
-		t.Fatalf("New with empty config error = %v", err)
+
+	executor, err := New("  ")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	command, err := executor.Command("production")
+	if err != nil {
+		t.Fatalf("Command: %v", err)
+	}
+
+	want := []string{binaryPath, "--", "production"}
+	if !reflect.DeepEqual(command.Args, want) {
+		t.Errorf("Command.Args = %#v, want %#v", command.Args, want)
 	}
 }
 
@@ -76,8 +89,5 @@ func TestCommandValidatesAliasAndExecutor(t *testing.T) {
 
 	if _, err := (Executor{configPath: "/tmp/config"}).Command("host"); err == nil {
 		t.Error("Command with empty binary path returned nil error")
-	}
-	if _, err := (Executor{binaryPath: "/usr/bin/ssh"}).Command("host"); err == nil {
-		t.Error("Command with empty config path returned nil error")
 	}
 }

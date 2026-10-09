@@ -121,16 +121,29 @@ ANSI terminal colors. `default` restores Stargate's original violet palette.
 - Effective `HostName`, `User`, `Port`, `IdentityFile`, `ProxyJump`, and
   `ProxyCommand` settings use OpenSSH's first-value-wins behavior.
 - Hosts using `ProxyJump` or `ProxyCommand` are marked `via Jump-Host`.
-- `Match exec` is intentionally unsupported and rejected without executing the
-  configured command.
+- `HostName` values support the `%h` and `%%` tokens.
+- `Match all` and `Match host <patterns>` blocks contribute effective settings.
+  Stargate skips every other `Match` block, including `Match exec`, without
+  evaluating it. Their settings are not shown in the TUI, but OpenSSH still
+  applies them when connecting.
 
-Stargate invokes connections as:
+With the default `~/.ssh/config`, Stargate invokes connections as:
+
+```text
+ssh -- <selected-alias>
+```
+
+OpenSSH then reads `~/.ssh/config` and the system-wide `/etc/ssh/ssh_config`
+as usual. With `--config` or `STARGATE_CONFIG`, Stargate uses:
 
 ```text
 ssh -F <resolved-config-path> -- <selected-alias>
 ```
 
-This ensures that the native client uses the same config Stargate displayed.
+`-F` makes OpenSSH ignore `/etc/ssh/ssh_config`, so system-wide settings such
+as crypto policies or `StrictHostKeyChecking` do not apply to these
+connections.
+
 Stargate does not read passwords, private key contents, or SSH agent data.
 
 ## Development
@@ -168,6 +181,6 @@ vulnerabilities. The original design document is kept in
 ## Current limitations
 
 - Unix terminals only; Windows is not supported.
-- Conditional `Match` blocks are not connection targets; `Match exec` is
-  rejected.
+- Conditional `Match` blocks are not connection targets. Only `Match all` and
+  `Match host` contribute to the displayed settings.
 - Stargate is an SSH launcher, not an embedded terminal or SFTP client.

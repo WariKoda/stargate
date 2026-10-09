@@ -43,7 +43,13 @@ inherits the terminal directly.
 
 ### How connections are launched
 
-Stargate always invokes:
+With the default `~/.ssh/config`, Stargate invokes:
+
+```text
+ssh -- <selected-alias>
+```
+
+With `--config` or `STARGATE_CONFIG`, it invokes:
 
 ```text
 ssh -F <resolved-config-path> -- <selected-alias>
@@ -52,23 +58,30 @@ ssh -F <resolved-config-path> -- <selected-alias>
 - The command is executed via `os/exec` with an explicit argument vector.
   **No shell is involved**, so no shell metacharacter in a config value can be
   interpreted as a command.
-- `-F` pins the client to exactly the config file Stargate parsed and displayed,
-  so what you saw is what `ssh` uses.
+- Without an explicit config, `ssh` loads `~/.ssh/config` and the system-wide
+  `/etc/ssh/ssh_config` exactly as it would when run directly. System policies
+  such as crypto policies, `StrictHostKeyChecking`, or global known-hosts files
+  therefore stay in effect.
+- An explicit config is passed with `-F`, which pins the client to the file
+  Stargate parsed. OpenSSH then ignores `/etc/ssh/ssh_config`; this is
+  OpenSSH's documented behavior for `-F`.
 - The `--` separator prevents an alias beginning with `-` from being parsed as
   an ssh option.
 - Aliases are validated before use: empty aliases, aliases containing NUL bytes,
   and aliases containing whitespace are rejected.
 - Stargate connects by **alias**, never by a reconstructed `user@host:port`.
-  This is deliberate: it guarantees the native client applies the full effective
+  This is deliberate: it lets the native client apply the full effective
   configuration — `ProxyJump`, `ProxyCommand`, forwardings, identities and host
-  key policy — exactly as OpenSSH would.
+  key policy — as OpenSSH would.
 
-### `Match exec` is rejected, not executed
+### `Match exec` is never executed
 
 An SSH config can ask for an arbitrary shell command via `Match exec`. Stargate
-**never executes it**. Configs using `Match exec` are rejected. This is a
-security decision, not only a scope decision: parsing a config file must not be
-able to run code.
+**never executes it**. When parsing, Stargate skips `Match exec` blocks and all
+other `Match` blocks it cannot evaluate, together with any `Include` inside
+them. This is a security decision, not only a scope decision: parsing a config
+file must not be able to run code. OpenSSH still evaluates these blocks when
+it connects, as it would without Stargate.
 
 ### Command preview and clipboard
 
@@ -98,7 +111,7 @@ which may be visible to network monitoring.
 Stargate trusts your SSH config file as much as `ssh` itself does: it is your
 own configuration. A hostile `~/.ssh/config` is outside the threat model with
 one explicit exception — parsing it must never execute code, which is why
-`Match exec` is rejected.
+`Match exec` is never evaluated.
 
 Stargate has no network listeners, no telemetry, no auto-update, and no
 configuration of its own beyond a config-file path.

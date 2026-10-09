@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/term"
@@ -44,7 +47,11 @@ func run(args []string) error {
 		return err
 	}
 
-	executor, err := sshexecutor.New(loaded.Path)
+	sshConfigPath := ""
+	if loaded.Explicit {
+		sshConfigPath = loaded.Path
+	}
+	executor, err := sshexecutor.New(sshConfigPath)
 	if err != nil {
 		return err
 	}
@@ -109,8 +116,20 @@ func runSessionLoop(
 		command.Stdout = os.Stdout
 		command.Stderr = os.Stderr
 		command.Env = sshEnvironment(os.Environ())
-		resume = &tui.SessionResume{Host: host, Err: command.Run()}
+		resume = &tui.SessionResume{Host: host, Err: runSSH(command)}
 	}
+}
+
+// runSSH keeps terminal interrupts from terminating Stargate while ssh runs.
+// The terminal delivers Ctrl+C and Ctrl+\ to the whole foreground process
+// group, so ssh still receives them and decides how to react. Catching rather
+// than ignoring the signals matters: ignored signals stay ignored in the child.
+func runSSH(command *exec.Cmd) error {
+	interrupts := make(chan os.Signal, 1)
+	signal.Notify(interrupts, os.Interrupt, syscall.SIGQUIT)
+	defer signal.Stop(interrupts)
+
+	return command.Run()
 }
 
 // sshEnvironment mirrors Ghostty's SSH shell wrapper when Stargate launches

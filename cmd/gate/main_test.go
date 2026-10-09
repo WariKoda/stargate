@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"errors"
 	"flag"
+	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
+	appconfig "github.com/warikoda/stargate/internal/config"
 	sshexecutor "github.com/warikoda/stargate/internal/ssh"
 )
 
@@ -113,4 +116,61 @@ func TestRunChecksForSSHBeforeStartingTUI(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "find ssh in PATH") {
 		t.Fatalf("run without ssh error = %v, want PATH context", err)
 	}
+}
+
+func TestRunPrintUsesDefaultSSHConfigsWithoutExplicitPath(t *testing.T) {
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
+		t.Fatalf("create .ssh: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(home, ".ssh", "config"), []byte("Host server\n"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	binDir := t.TempDir()
+	binaryPath := filepath.Join(binDir, "ssh")
+	if err := os.WriteFile(binaryPath, []byte("#!/bin/sh\n"), 0o700); err != nil {
+		t.Fatalf("write fake ssh: %v", err)
+	}
+	t.Setenv("HOME", home)
+	t.Setenv("PATH", binDir)
+	t.Setenv(appconfig.ConfigEnvironment, "")
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"--print", "server"}); err != nil {
+			t.Fatalf("run(--print): %v", err)
+		}
+	})
+	if want := binaryPath + " -- server\n"; output != want {
+		t.Errorf("--print output = %q, want %q", output, want)
+	}
+}
+
+func TestRunSSHSurvivesTerminalInterrupt(t *testing.T) {
+	// The terminal sends Ctrl+C to the whole foreground process group; the
+	// child simulates that by interrupting its parent, this test process.
+	command := exec.Command("/bin/sh", "-c", `kill -INT "$PPID"; sleep 0.2`)
+	if err := runSSH(command); err != nil {
+		t.Fatalf("runSSH: %v", err)
+	}
+}
+
+func captureStdout(t *testing.T, action func()) string {
+	t.Helper()
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("create pipe: %v", err)
+	}
+	original := os.Stdout
+	os.Stdout = writer
+	defer func() { os.Stdout = original }()
+
+	action()
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close pipe: %v", err)
+	}
+	output, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatalf("read pipe: %v", err)
+	}
+	return string(output)
 }
