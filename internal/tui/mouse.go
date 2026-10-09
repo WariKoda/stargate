@@ -1,6 +1,9 @@
 package tui
 
-import tea "github.com/charmbracelet/bubbletea"
+import (
+	"github.com/charmbracelet/bubbles/list"
+	tea "github.com/charmbracelet/bubbletea"
+)
 
 func (m *Model) handleMouse(message tea.MouseMsg) (tea.Cmd, bool) {
 	event := tea.MouseEvent(message)
@@ -16,6 +19,9 @@ func (m *Model) handleMouse(message tea.MouseMsg) (tea.Cmd, bool) {
 		m.list.CursorDown()
 		return nil, true
 	case tea.MouseButtonLeft:
+		if m.list.FilterState() == list.Filtering {
+			return nil, false
+		}
 		index, ok := m.itemIndexAt(event.X, event.Y)
 		if !ok {
 			return nil, false
@@ -37,12 +43,14 @@ func (m Model) itemIndexAt(x, y int) (int, bool) {
 		return 0, false
 	}
 
+	// Title and status bar are one line each plus the frame of their styles;
+	// the default bubbles styles add a blank line below both.
 	top := m.styles.app.GetPaddingTop()
 	if m.list.ShowTitle() || (m.list.ShowFilter() && m.list.FilteringEnabled()) {
-		top++
+		top += 1 + m.list.Styles.TitleBar.GetVerticalFrameSize()
 	}
 	if m.list.ShowStatusBar() {
-		top++
+		top += 1 + m.list.Styles.StatusBar.GetVerticalFrameSize()
 	}
 
 	relativeY := y - top

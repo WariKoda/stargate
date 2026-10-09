@@ -12,6 +12,9 @@ func (m Model) View() string {
 	if m.showDetails {
 		details := m.hostDetailsView()
 		if m.detailsBeside {
+			// Padding the list to its full width keeps the details panel outside
+			// the columns itemIndexAt treats as clickable host rows.
+			content = lipgloss.PlaceHorizontal(m.list.Width(), lipgloss.Left, content)
 			content = lipgloss.JoinHorizontal(lipgloss.Top, content, strings.Repeat(" ", detailGap), details)
 		} else {
 			content += "\n\n" + details

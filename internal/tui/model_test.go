@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	appconfig "github.com/warikoda/stargate/internal/config"
 )
@@ -487,7 +488,7 @@ func TestModelMouseWheelNavigatesAndClickConnects(t *testing.T) {
 	}
 	model = updateModel(t, model, mouseMessage(3, 3, tea.MouseButtonWheelUp))
 
-	updated, cmd := model.Update(mouseMessage(3, 6, tea.MouseButtonLeft))
+	updated, cmd := model.Update(mouseMessage(3, renderedRow(t, model, "second"), tea.MouseButtonLeft))
 	model = modelFromTea(t, updated)
 	selected, ok = model.SelectedHost()
 	if !ok || selected.Alias != "second" {
@@ -502,6 +503,37 @@ func TestModelMouseWheelNavigatesAndClickConnects(t *testing.T) {
 	}
 }
 
+func TestModelMouseClickHitsTheRenderedHost(t *testing.T) {
+	t.Parallel()
+
+	model := New([]appconfig.Host{
+		{Alias: "alpha", HostName: "alpha.example.com", Port: "22"},
+		{Alias: "bravo", HostName: "bravo.example.com", Port: "22"},
+		{Alias: "charlie", HostName: "charlie.example.com", Port: "22"},
+	}, &stubConnector{}, nil)
+	model = updateModel(t, model, tea.WindowSizeMsg{Width: 120, Height: 40})
+
+	for _, test := range []struct {
+		text  string
+		alias string
+	}{
+		{text: "alpha", alias: "alpha"},
+		{text: "alpha.example.com", alias: "alpha"},
+		{text: "bravo", alias: "bravo"},
+		{text: "bravo.example.com", alias: "bravo"},
+		{text: "charlie.example.com", alias: "charlie"},
+	} {
+		index, ok := model.itemIndexAt(4, renderedRow(t, model, test.text))
+		if !ok {
+			t.Errorf("click on %q hit no host", test.text)
+			continue
+		}
+		if got := model.list.VisibleItems()[index].(hostItem).host.Alias; got != test.alias {
+			t.Errorf("click on %q hit %q, want %q", test.text, got, test.alias)
+		}
+	}
+}
+
 func TestModelMouseClickWorksWithSideDetails(t *testing.T) {
 	t.Parallel()
 
@@ -513,14 +545,19 @@ func TestModelMouseClickWorksWithSideDetails(t *testing.T) {
 	if !model.detailsBeside {
 		t.Fatal("wide terminal does not render details beside the list")
 	}
-	if _, ok := model.itemIndexAt(2+model.list.Width()+1, 6); ok {
+	row := renderedRow(t, model, "second")
+	if _, ok := model.itemIndexAt(2+model.list.Width()+1, row); ok {
 		t.Fatal("detail gutter is treated as a host list item")
 	}
-	if index, ok := model.itemIndexAt(3, 6); !ok || index != 1 {
+	detailsColumn := strings.Index(strings.Split(ansi.Strip(model.View()), "\n")[1], "Details")
+	if detailsColumn < 2+model.list.Width() {
+		t.Fatalf("details panel starts at column %d inside the clickable list width %d", detailsColumn, 2+model.list.Width())
+	}
+	if index, ok := model.itemIndexAt(3, row); !ok || index != 1 {
 		t.Fatalf("itemIndexAt() = %d, %t; list=%dx%d", index, ok, model.list.Width(), model.list.Height())
 	}
 
-	updated, command := model.Update(mouseMessage(3, 6, tea.MouseButtonLeft))
+	updated, command := model.Update(mouseMessage(3, row, tea.MouseButtonLeft))
 	model = modelFromTea(t, updated)
 	selected, ok := model.SelectedHost()
 	if !ok || selected.Alias != "second" {
@@ -540,20 +577,38 @@ func TestModelMouseIgnoresSpacingAndOutsideClicks(t *testing.T) {
 	}, &stubConnector{}, nil)
 
 	for _, message := range []tea.MouseMsg{
-		mouseMessage(3, 5, tea.MouseButtonLeft), // spacing after the first item
-		mouseMessage(0, 3, tea.MouseButtonLeft), // outside the app's left padding
-		mouseMessage(3, 1, tea.MouseButtonLeft), // title bar
+		mouseMessage(3, renderedRow(t, model, "first.example.com")+1, tea.MouseButtonLeft), // spacing after the first item
+		mouseMessage(0, renderedRow(t, model, "first"), tea.MouseButtonLeft),               // outside the app's left padding
+		mouseMessage(3, renderedRow(t, model, "Stargate"), tea.MouseButtonLeft),            // title bar
+		mouseMessage(3, renderedRow(t, model, "connectable hosts"), tea.MouseButtonLeft),   // status bar
 	} {
 		updated, cmd := model.Update(message)
 		model = modelFromTea(t, updated)
 		if cmd != nil {
-			t.Fatal("non-item mouse click returned a command")
+			t.Fatalf("non-item mouse click at %d,%d returned a command", message.X, message.Y)
 		}
 	}
 
 	selected, ok := model.SelectedHost()
 	if !ok || selected.Alias != "first" {
 		t.Fatalf("non-item clicks selected %#v, want first", selected)
+	}
+}
+
+func TestModelMouseClickDoesNotConnectWhileFiltering(t *testing.T) {
+	t.Parallel()
+
+	model := New([]appconfig.Host{
+		{Alias: "first", HostName: "first.example.com", Port: "22"},
+		{Alias: "second", HostName: "second.example.com", Port: "22"},
+	}, &stubConnector{}, nil)
+	row := renderedRow(t, model, "second")
+	model = updateModel(t, model, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+
+	if _, cmd := model.Update(mouseMessage(3, row, tea.MouseButtonLeft)); cmd != nil {
+		if _, connect := cmd().(connectRequestedMsg); connect {
+			t.Fatal("mouse click requested a connection while filter input was active")
+		}
 	}
 }
 
@@ -567,6 +622,20 @@ func TestModelEnterDoesNotConnectWhileFiltering(t *testing.T) {
 	if _, ok := model.RequestedHost(); ok {
 		t.Fatal("Enter requested a host while filter input was active")
 	}
+}
+
+// renderedRow returns the screen row of the first line in the host list
+// column containing text, ignoring the details panel beside it.
+func renderedRow(t *testing.T, model Model, text string) int {
+	t.Helper()
+	listRight := model.styles.app.GetPaddingLeft() + model.list.Width()
+	for row, line := range strings.Split(ansi.Strip(model.View()), "\n") {
+		if strings.Contains(ansi.Truncate(line, listRight, ""), text) {
+			return row
+		}
+	}
+	t.Fatalf("%q is not rendered", text)
+	return -1
 }
 
 func mouseMessage(x, y int, button tea.MouseButton) tea.MouseMsg {
